@@ -1,19 +1,8 @@
-"""
-main.py — Ponto de entrada do compilador MiniPar (versão Python)
-
-Uso:
-    python main.py <arquivo_fonte.minipar> [nome_saida]
-
-Exemplo:
-    python main.py teste.minipar teste_math_print
-    ./output/teste_math_print.exe
-"""
 import sys
 import os
 
-# Permite importar os módulos do diretório src tanto ao rodar como
-# 'python src/main.py' quanto 'python main.py' a partir da raiz.
-sys.path.insert(0, os.path.dirname(__file__))
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(BASE_DIR, 'src'))
 
 from lexer import Lexer
 from parser import Parser
