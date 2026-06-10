@@ -1,13 +1,22 @@
-class Pessoa {
-    var idade;
-    func fazer_aniversario() {
-        this.idade = this.idade + 1;
-        print("Nova idade:", this.idade);
-    }
-}
-
 seq {
-    var p = new Pessoa();
-    p.idade = 20;
-    p.fazer_aniversario();
+    print("Iniciando teste de Rede (Sockets TCP)...");
+
+    par {
+        seq {
+            # Thread 1: O Servidor (Recebedor)
+            var canal_servidor = c_channel("127.0.0.1", 8080);
+            print("[Servidor] Aguardando mensagem na porta 8080...");
+            var mensagem = receive(canal_servidor);
+            print("[Servidor] Mensagem recebida na rede:", mensagem);
+        }
+        seq {
+            # Thread 2: O Cliente (Enviador)
+            var canal_cliente = c_channel("127.0.0.1", 8080);
+            print("[Cliente] Conectando ao servidor e enviando dado...");
+            send(canal_cliente, "Ola, Servidor! Teste de Sockets TCP OK.");
+            print("[Cliente] Mensagem enviada com sucesso.");
+        }
+    }
+
+    print("Teste de Rede finalizado.");
 }

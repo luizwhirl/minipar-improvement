@@ -5,7 +5,8 @@ from typing import Dict, List, Optional
 from ast_nodes import (
     ASTNode, Program, VarDecl, Assignment, PrintStmt, IdentifierExpr, BinaryExpr, 
     UnaryExpr, SeqBlock, ParBlock, IfStmt, WhileStmt,
-    ClassDecl, FuncDecl, ReturnStmt, MethodCall, PropertyAccess, PropertyAssign, NewExpr, ThisExpr
+    ClassDecl, FuncDecl, ReturnStmt, MethodCall, PropertyAccess, PropertyAssign, NewExpr, ThisExpr,
+    CChannelExpr, SendStmt, ReceiveExpr
 )
 
 @dataclass
@@ -47,6 +48,14 @@ class SemanticAnalyzer:
             self.validate_node(node.value)
         elif isinstance(node, PrintStmt):
             for arg in node.arguments: self.validate_node(arg)
+        elif isinstance(node, SendStmt):
+            self.validate_node(node.channel)
+            self.validate_node(node.message)
+        elif isinstance(node, CChannelExpr):
+            self.validate_node(node.ip)
+            self.validate_node(node.port)
+        elif isinstance(node, ReceiveExpr):
+            self.validate_node(node.channel)
         elif isinstance(node, IdentifierExpr):
             if self._lookup(node.name) is None:
                 print(f"[ERRO SEMANTICO] Linha {node.line}: Variavel '{node.name}' nao declarada.", file=sys.stderr)

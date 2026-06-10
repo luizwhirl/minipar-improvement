@@ -6,7 +6,8 @@ from typing import Optional
 from ast_nodes import (
     ASTNode, Program, VarDecl, Assignment, PrintStmt, SeqBlock, ParBlock, BinaryExpr, 
     UnaryExpr, NumberExpr, StringExpr, IdentifierExpr, IfStmt, WhileStmt,
-    ClassDecl, FuncDecl, ReturnStmt, MethodCall, PropertyAccess, PropertyAssign, NewExpr, ThisExpr
+    ClassDecl, FuncDecl, ReturnStmt, MethodCall, PropertyAccess, PropertyAssign, NewExpr, ThisExpr,
+    CChannelExpr, SendStmt, ReceiveExpr
 )
 
 _CPP_HEADER = """\
@@ -15,20 +16,82 @@ _CPP_HEADER = """\
 #include <vector>
 #include <thread>
 #include <memory>
+#include <cstring>
+#include <chrono>
 
 #ifdef _WIN32
   #include <winsock2.h>
+  #include <ws2tcpip.h>
   #pragma comment(lib, "ws2_32.lib")
+  #define CLOSE_SOCK closesocket
 #else
   #include <sys/socket.h>
   #include <arpa/inet.h>
   #include <unistd.h>
+  #define CLOSE_SOCK close
 #endif
+
+// Helper para enviar números ou strings sem tipagem forte
+template<typename T>
+std::string __to_string(const T& val) {
+    if constexpr (std::is_same_v<std::decay_t<T>, std::string> || std::is_same_v<std::decay_t<T>, const char*>) {
+        return val;
+    } else {
+        return std::to_string(val);
+    }
+}
 
 class MiniParChannel {
 public:
-    static void sendData(std::string ip, int port, std::string msg) {}
-    static std::string receiveData(int port) { return ""; }
+    std::string ip;
+    int port;
+
+    MiniParChannel(std::string ip, int port) : ip(ip), port(port) {}
+
+    void sendData(std::string msg) {
+        int sock = socket(AF_INET, SOCK_STREAM, 0);
+        if (sock < 0) return;
+        struct sockaddr_in serv_addr;
+        serv_addr.sin_family = AF_INET;
+        serv_addr.sin_port = htons(port);
+        inet_pton(AF_INET, ip.c_str(), &serv_addr.sin_addr);
+        
+        // Tenta conectar por 5 segundos para lidar com dessincronização de nós
+        for(int i=0; i<50; i++) {
+            if (connect(sock, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) >= 0) {
+                send(sock, msg.c_str(), msg.length(), 0);
+                break;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+        CLOSE_SOCK(sock);
+    }
+
+    std::string receiveData() {
+        int server_fd = socket(AF_INET, SOCK_STREAM, 0);
+        if (server_fd < 0) return "";
+        int opt = 1;
+        setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, (const char*)&opt, sizeof(opt));
+        
+        struct sockaddr_in address;
+        address.sin_family = AF_INET;
+        address.sin_addr.s_addr = INADDR_ANY;
+        address.sin_port = htons(port);
+        
+        if (bind(server_fd, (struct sockaddr*)&address, sizeof(address)) < 0) { CLOSE_SOCK(server_fd); return ""; }
+        if (listen(server_fd, 3) < 0) { CLOSE_SOCK(server_fd); return ""; }
+        
+        int new_socket = accept(server_fd, nullptr, nullptr);
+        if (new_socket < 0) { CLOSE_SOCK(server_fd); return ""; }
+        
+        char buffer[4096] = {0};
+        recv(new_socket, buffer, 4096, 0);
+        std::string result(buffer);
+        
+        CLOSE_SOCK(new_socket);
+        CLOSE_SOCK(server_fd);
+        return result;
+    }
 };
 
 """
@@ -54,7 +117,6 @@ class CppCodeGenerator:
         if isinstance(node, BinaryExpr):
             return f"({self._translate_expression(node.left)} {node.op} {self._translate_expression(node.right)})"
         
-        # Orientação a Objetos
         if isinstance(node, NewExpr):
             args = ", ".join(self._translate_expression(a) for a in node.arguments)
             return f"std::make_shared<{node.class_name}>({args})"
@@ -64,6 +126,15 @@ class CppCodeGenerator:
         if isinstance(node, MethodCall):
             args = ", ".join(self._translate_expression(a) for a in node.arguments)
             return f"{self._translate_expression(node.object)}->{node.method_name}({args})"
+        
+        # Orientação a Redes
+        if isinstance(node, CChannelExpr):
+            ip = self._translate_expression(node.ip)
+            port = self._translate_expression(node.port)
+            return f"std::make_shared<MiniParChannel>({ip}, {port})"
+        if isinstance(node, ReceiveExpr):
+            return f"{self._translate_expression(node.channel)}->receiveData()"
+
         return "0"
 
     def _translate_statement(self, node: Optional[ASTNode], indent: str = "") -> str:
@@ -81,6 +152,12 @@ class CppCodeGenerator:
         if isinstance(node, ReturnStmt):
             val = self._translate_expression(node.value) if node.value else ""
             return f"{indent}return {val};\n"
+        
+        if isinstance(node, SendStmt):
+            chan = self._translate_expression(node.channel)
+            msg = self._translate_expression(node.message)
+            return f"{indent}{chan}->sendData(__to_string({msg}));\n"
+
         if isinstance(node, PrintStmt):
             parts = [f" << {self._translate_expression(a)}" for a in node.arguments]
             sep = ' << " "'
@@ -115,7 +192,6 @@ class CppCodeGenerator:
     def generate(self, program: Program, output_name: str) -> None:
         cpp_code = _CPP_HEADER
         
-        # 1. Classes declaradas fora do main
         for node in program.statements:
             if isinstance(node, ClassDecl):
                 cpp_code += f"class {node.name}" + (f" : public {node.superclass}" if node.superclass else "") + " {\npublic:\n"
@@ -131,7 +207,6 @@ class CppCodeGenerator:
                     cpp_code += "    }\n"
                 cpp_code += "};\n\n"
 
-        # 2. Main
         cpp_code += "int main() {\n    #ifdef _WIN32\n        WSADATA wsa;\n        WSAStartup(MAKEWORD(2,2), &wsa);\n    #endif\n\n"
         for node in program.statements:
             if not isinstance(node, ClassDecl):
@@ -146,7 +221,6 @@ class CppCodeGenerator:
 
         with open(cpp_path, "w", encoding="utf-8") as f: f.write(cpp_code)
         
-        # Uso obrigatório do C++20 para inferência (auto) em métodos de classes
         print("[CODEGEN] Compilando via g++ com -std=c++20 e -O3...")
         result = subprocess.run(["g++", "-std=c++20", "-O3", cpp_path, "-o", exe_path, "-pthread", "-lws2_32"])
         if result.returncode == 0: print(f"[SUCESSO] Executavel: {exe_path}")

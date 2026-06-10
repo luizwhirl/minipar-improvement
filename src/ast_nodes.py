@@ -74,7 +74,6 @@ class WhileStmt(ASTNode):
     body: ASTNode
     line: int = 1
 
-# --- NÓS DE ORIENTAÇÃO A OBJETOS ---
 @dataclass
 class ClassDecl(ASTNode):
     name: str
@@ -123,6 +122,23 @@ class NewExpr(ASTNode):
 
 @dataclass
 class ThisExpr(ASTNode):
+    line: int = 1
+
+@dataclass
+class CChannelExpr(ASTNode):
+    ip: ASTNode
+    port: ASTNode
+    line: int = 1
+
+@dataclass
+class SendStmt(ASTNode):
+    channel: ASTNode
+    message: ASTNode
+    line: int = 1
+
+@dataclass
+class ReceiveExpr(ASTNode):
+    channel: ASTNode
     line: int = 1
 
 @dataclass

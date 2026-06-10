@@ -5,7 +5,8 @@ from lexer import Token, TokenType
 from ast_nodes import (
     ASTNode, Program, VarDecl, Assignment, PrintStmt, SeqBlock, ParBlock, 
     BinaryExpr, UnaryExpr, NumberExpr, StringExpr, IdentifierExpr, IfStmt, WhileStmt,
-    ClassDecl, FuncDecl, ReturnStmt, MethodCall, PropertyAccess, PropertyAssign, NewExpr, ThisExpr
+    ClassDecl, FuncDecl, ReturnStmt, MethodCall, PropertyAccess, PropertyAssign, NewExpr, ThisExpr,
+    CChannelExpr, SendStmt, ReceiveExpr
 )
 
 class Parser:
@@ -54,6 +55,16 @@ class Parser:
         self._consume(TokenType.RPAREN, "Esperado ')' apos argumentos do print")
         self._consume(TokenType.SEMICOLON, "Esperado ';' apos print")
         return node
+
+    def _parse_send_stmt(self) -> ASTNode:
+        line = self._tokens[self._pos - 1].line
+        self._consume(TokenType.LPAREN, "Esperado '(' apos send")
+        channel = self._parse_expression()
+        self._consume(TokenType.COMMA, "Esperado ',' entre canal e mensagem")
+        message = self._parse_expression()
+        self._consume(TokenType.RPAREN, "Esperado ')'")
+        self._consume(TokenType.SEMICOLON, "Esperado ';'")
+        return SendStmt(channel=channel, message=message, line=line)
 
     def _parse_seq_block(self) -> ASTNode:
         node = SeqBlock()
@@ -130,11 +141,11 @@ class Parser:
             return self._parse_seq_block()
         if self._match(TokenType.PAR): return self._parse_par_block()
         if self._match(TokenType.PRINT): return self._parse_print_stmt()
+        if self._match(TokenType.SEND): return self._parse_send_stmt()
         if self._match(TokenType.IF): return self._parse_if_stmt()
         if self._match(TokenType.WHILE): return self._parse_while_stmt()
 
-        # Parse de Atribuição e Chamada de Método via Resolução de Expressão
-        if self._peek().type in (TokenType.IDENTIFIER, TokenType.THIS, TokenType.NEW):
+        if self._peek().type in (TokenType.IDENTIFIER, TokenType.THIS, TokenType.NEW, TokenType.RECEIVE, TokenType.C_CHANNEL):
             expr = self._parse_expression()
             if self._match(TokenType.ASSIGN):
                 val = self._parse_expression()
@@ -192,7 +203,21 @@ class Parser:
         tok = self._peek()
         node = None
 
-        if self._match(TokenType.NEW):
+        if self._match(TokenType.C_CHANNEL):
+            line = tok.line
+            self._consume(TokenType.LPAREN, "Esperado '(' apos c_channel")
+            ip = self._parse_expression()
+            self._consume(TokenType.COMMA, "Esperado ',' entre ip e porta")
+            port = self._parse_expression()
+            self._consume(TokenType.RPAREN, "Esperado ')'")
+            node = CChannelExpr(ip=ip, port=port, line=line)
+        elif self._match(TokenType.RECEIVE):
+            line = tok.line
+            self._consume(TokenType.LPAREN, "Esperado '(' apos receive")
+            channel = self._parse_expression()
+            self._consume(TokenType.RPAREN, "Esperado ')'")
+            node = ReceiveExpr(channel=channel, line=line)
+        elif self._match(TokenType.NEW):
             line = tok.line
             class_name = self._consume(TokenType.IDENTIFIER, "Esperado nome da classe").lexeme
             self._consume(TokenType.LPAREN, "Esperado '('")
@@ -216,7 +241,6 @@ class Parser:
         else:
             sys.exit(print(f"[ERRO SINTATICO] Linha {tok.line}: Expressao esperada", file=sys.stderr) or 1)
 
-        # Trata encadeamentos polimórficos de objeto (Ex: obj.var ou obj.metodo().outro_metodo())
         while self._match(TokenType.DOT):
             prop_tok = self._consume(TokenType.IDENTIFIER, "Esperado identificador apos '.'")
             if self._match(TokenType.LPAREN):
