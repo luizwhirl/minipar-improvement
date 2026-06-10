@@ -18,6 +18,7 @@ _CPP_HEADER = """\
 #include <memory>
 #include <cstring>
 #include <chrono>
+#include <type_traits>
 
 #ifdef _WIN32
   #include <winsock2.h>
@@ -34,8 +35,8 @@ _CPP_HEADER = """\
 // Helper para enviar números ou strings sem tipagem forte
 template<typename T>
 std::string __to_string(const T& val) {
-    if constexpr (std::is_same_v<std::decay_t<T>, std::string> || std::is_same_v<std::decay_t<T>, const char*>) {
-        return val;
+    if constexpr (std::is_constructible_v<std::string, T>) {
+        return std::string(val);
     } else {
         return std::to_string(val);
     }
@@ -56,7 +57,6 @@ public:
         serv_addr.sin_port = htons(port);
         inet_pton(AF_INET, ip.c_str(), &serv_addr.sin_addr);
         
-        // Tenta conectar por 5 segundos para lidar com dessincronização de nós
         for(int i=0; i<50; i++) {
             if (connect(sock, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) >= 0) {
                 send(sock, msg.c_str(), msg.length(), 0);
