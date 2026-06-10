@@ -1,0 +1,15 @@
+.vscode
+
+# ./output
+meu_teste.cpp
+meu_teste.exe
+
+# ./src
+codegen.o
+lexer.o
+main.o
+parser.o
+semantic.o
+
+# misc
+minipar_compiler.exe
