@@ -1,6 +1,9 @@
 seq {
-    var x = 10;
-    var y = 20;
-    var z = x + y * 2 - (5 / 1);
-    print("Resultado de z:", z);
+    var principal = 100;
+    print("Iniciando rotinas paralelas...");
+    par {
+        print("Thread A acessando variavel:", principal);
+        print("Thread B disparada de forma assincrona");
+    }
+    print("Bloco paralelo finalizado.");
 }
