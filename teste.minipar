@@ -1,4 +1,4 @@
 seq {
-    var a;
-    var b;
+    var a = 2 + 3 * 4;
+    print("resultado", a, (10 - 2) / 4);
 }
