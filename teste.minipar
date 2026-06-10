@@ -1,15 +1,13 @@
-seq {
-    var contador = 5;
-    print("Iniciando laco de repeticao!");
-
-    while (contador > 0) {
-        if (contador == 3) {
-            print("Chegamos na metade! Contador:", contador);
-        } else {
-            print("Rodando... Contador:", contador);
-        }
-        contador = contador - 1;
+class Pessoa {
+    var idade;
+    func fazer_aniversario() {
+        this.idade = this.idade + 1;
+        print("Nova idade:", this.idade);
     }
-    
-    print("Laco encerrado com sucesso.");
+}
+
+seq {
+    var p = new Pessoa();
+    p.idade = 20;
+    p.fazer_aniversario();
 }
