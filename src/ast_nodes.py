@@ -142,6 +142,30 @@ class ReceiveExpr(ASTNode):
     line: int = 1
 
 @dataclass
+class ListLiteral(ASTNode):
+    elements: List[ASTNode]
+    line: int = 1
+
+@dataclass
+class MatrixCreateExpr(ASTNode):
+    rows: ASTNode
+    cols: ASTNode
+    init_value: ASTNode
+    line: int = 1
+
+@dataclass
+class IndexExpr(ASTNode):
+    object: ASTNode
+    index: ASTNode
+    line: int = 1
+
+@dataclass
+class IndexAssign(ASTNode):
+    target: ASTNode
+    value: ASTNode
+    line: int = 1
+
+@dataclass
 class Program(ASTNode):
     statements: List[ASTNode] = field(default_factory=list)
     line: int = 1

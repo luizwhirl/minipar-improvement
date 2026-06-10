@@ -6,7 +6,7 @@ from ast_nodes import (
     ASTNode, Program, VarDecl, Assignment, PrintStmt, SeqBlock, ParBlock, 
     BinaryExpr, UnaryExpr, NumberExpr, StringExpr, IdentifierExpr, IfStmt, WhileStmt,
     ClassDecl, FuncDecl, ReturnStmt, MethodCall, PropertyAccess, PropertyAssign, NewExpr, ThisExpr,
-    CChannelExpr, SendStmt, ReceiveExpr
+    CChannelExpr, SendStmt, ReceiveExpr, ListLiteral, MatrixCreateExpr, IndexExpr, IndexAssign
 )
 
 class Parser:
@@ -145,13 +145,15 @@ class Parser:
         if self._match(TokenType.IF): return self._parse_if_stmt()
         if self._match(TokenType.WHILE): return self._parse_while_stmt()
 
-        if self._peek().type in (TokenType.IDENTIFIER, TokenType.THIS, TokenType.NEW, TokenType.RECEIVE, TokenType.C_CHANNEL):
+        # Intercepta as expressões que podem sofrer atribuição (Identificadores, Propriedades e Arrays)
+        if self._peek().type in (TokenType.IDENTIFIER, TokenType.THIS, TokenType.NEW, TokenType.RECEIVE, TokenType.C_CHANNEL, TokenType.MATRIX, TokenType.LBRACKET):
             expr = self._parse_expression()
             if self._match(TokenType.ASSIGN):
                 val = self._parse_expression()
                 self._consume(TokenType.SEMICOLON, "Esperado ';'")
                 if isinstance(expr, IdentifierExpr): return Assignment(name=expr.name, value=val, line=expr.line)
                 elif isinstance(expr, PropertyAccess): return PropertyAssign(object=expr.object, property_name=expr.property_name, value=val, line=expr.line)
+                elif isinstance(expr, IndexExpr): return IndexAssign(target=expr, value=val, line=expr.line)
                 else: sys.exit(print(f"[ERRO] Linha {expr.line}: Atribuicao invalida", file=sys.stderr) or 1)
             elif isinstance(expr, MethodCall):
                 self._consume(TokenType.SEMICOLON, "Esperado ';'")
@@ -203,7 +205,25 @@ class Parser:
         tok = self._peek()
         node = None
 
-        if self._match(TokenType.C_CHANNEL):
+        if self._match(TokenType.MATRIX):
+            line = tok.line
+            self._consume(TokenType.LPAREN, "Esperado '(' apos matrix")
+            rows = self._parse_expression()
+            self._consume(TokenType.COMMA, "Esperado ','")
+            cols = self._parse_expression()
+            self._consume(TokenType.COMMA, "Esperado ','")
+            init_val = self._parse_expression()
+            self._consume(TokenType.RPAREN, "Esperado ')'")
+            node = MatrixCreateExpr(rows=rows, cols=cols, init_value=init_val, line=line)
+        elif self._match(TokenType.LBRACKET):
+            line = tok.line
+            elements = []
+            if self._peek().type != TokenType.RBRACKET:
+                elements.append(self._parse_expression())
+                while self._match(TokenType.COMMA): elements.append(self._parse_expression())
+            self._consume(TokenType.RBRACKET, "Esperado ']'")
+            node = ListLiteral(elements=elements, line=line)
+        elif self._match(TokenType.C_CHANNEL):
             line = tok.line
             self._consume(TokenType.LPAREN, "Esperado '(' apos c_channel")
             ip = self._parse_expression()
@@ -241,17 +261,26 @@ class Parser:
         else:
             sys.exit(print(f"[ERRO SINTATICO] Linha {tok.line}: Expressao esperada", file=sys.stderr) or 1)
 
-        while self._match(TokenType.DOT):
-            prop_tok = self._consume(TokenType.IDENTIFIER, "Esperado identificador apos '.'")
-            if self._match(TokenType.LPAREN):
-                args = []
-                if self._peek().type != TokenType.RPAREN:
-                    args.append(self._parse_expression())
-                    while self._match(TokenType.COMMA): args.append(self._parse_expression())
-                self._consume(TokenType.RPAREN, "Esperado ')'")
-                node = MethodCall(object=node, method_name=prop_tok.lexeme, arguments=args, line=prop_tok.line)
+        # Loop de encadeamento (Ponto, Indexação, Chamadas)
+        while True:
+            if self._match(TokenType.DOT):
+                prop_tok = self._consume(TokenType.IDENTIFIER, "Esperado identificador apos '.'")
+                if self._match(TokenType.LPAREN):
+                    args = []
+                    if self._peek().type != TokenType.RPAREN:
+                        args.append(self._parse_expression())
+                        while self._match(TokenType.COMMA): args.append(self._parse_expression())
+                    self._consume(TokenType.RPAREN, "Esperado ')'")
+                    node = MethodCall(object=node, method_name=prop_tok.lexeme, arguments=args, line=prop_tok.line)
+                else:
+                    node = PropertyAccess(object=node, property_name=prop_tok.lexeme, line=prop_tok.line)
+            elif self._match(TokenType.LBRACKET):
+                idx_tok = self._tokens[self._pos - 1]
+                idx = self._parse_expression()
+                self._consume(TokenType.RBRACKET, "Esperado ']'")
+                node = IndexExpr(object=node, index=idx, line=idx_tok.line)
             else:
-                node = PropertyAccess(object=node, property_name=prop_tok.lexeme, line=prop_tok.line)
+                break
 
         return node
 

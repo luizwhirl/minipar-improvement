@@ -7,7 +7,7 @@ from ast_nodes import (
     ASTNode, Program, VarDecl, Assignment, PrintStmt, SeqBlock, ParBlock, BinaryExpr, 
     UnaryExpr, NumberExpr, StringExpr, IdentifierExpr, IfStmt, WhileStmt,
     ClassDecl, FuncDecl, ReturnStmt, MethodCall, PropertyAccess, PropertyAssign, NewExpr, ThisExpr,
-    CChannelExpr, SendStmt, ReceiveExpr
+    CChannelExpr, SendStmt, ReceiveExpr, ListLiteral, MatrixCreateExpr, IndexExpr, IndexAssign
 )
 
 _CPP_HEADER = """\
@@ -32,7 +32,19 @@ _CPP_HEADER = """\
   #define CLOSE_SOCK close
 #endif
 
-// Helper para enviar números ou strings sem tipagem forte
+// Helper para formatar e printar std::vector (arrays e matrizes) nativamente
+template <typename T>
+std::ostream& operator<<(std::ostream& os, const std::vector<T>& v) {
+    os << "[";
+    for (size_t i = 0; i < v.size(); ++i) {
+        os << v[i];
+        if (i != v.size() - 1) os << ", ";
+    }
+    os << "]";
+    return os;
+}
+
+// Helper para enviar números ou strings via Sockets
 template<typename T>
 std::string __to_string(const T& val) {
     if constexpr (std::is_constructible_v<std::string, T>) {
@@ -40,6 +52,13 @@ std::string __to_string(const T& val) {
     } else {
         return std::to_string(val);
     }
+}
+
+// Helper para criar matrizes 2D protegidas dinamicamente
+template<typename T>
+auto __make_matrix(int rows, int cols, T init_val) {
+    using ActualT = std::conditional_t<std::is_same_v<std::decay_t<T>, const char*>, std::string, T>;
+    return std::vector<std::vector<ActualT>>(rows, std::vector<ActualT>(cols, init_val));
 }
 
 class MiniParChannel {
@@ -127,13 +146,26 @@ class CppCodeGenerator:
             args = ", ".join(self._translate_expression(a) for a in node.arguments)
             return f"{self._translate_expression(node.object)}->{node.method_name}({args})"
         
-        # Orientação a Redes
         if isinstance(node, CChannelExpr):
             ip = self._translate_expression(node.ip)
             port = self._translate_expression(node.port)
             return f"std::make_shared<MiniParChannel>({ip}, {port})"
         if isinstance(node, ReceiveExpr):
             return f"{self._translate_expression(node.channel)}->receiveData()"
+
+        # Array e Matrizes
+        if isinstance(node, ListLiteral):
+            elems = ", ".join(self._translate_expression(e) for e in node.elements)
+            return f"std::vector{{{elems}}}"
+        if isinstance(node, MatrixCreateExpr):
+            r = self._translate_expression(node.rows)
+            c = self._translate_expression(node.cols)
+            v = self._translate_expression(node.init_value)
+            return f"__make_matrix({r}, {c}, {v})"
+        if isinstance(node, IndexExpr):
+            obj = self._translate_expression(node.object)
+            idx = self._translate_expression(node.index)
+            return f"{obj}[{idx}]"
 
         return "0"
 
@@ -147,6 +179,10 @@ class CppCodeGenerator:
         if isinstance(node, PropertyAssign):
             obj = self._translate_expression(node.object)
             return f"{indent}{obj}->{node.property_name} = {self._translate_expression(node.value)};\n"
+        if isinstance(node, IndexAssign):
+            tgt = self._translate_expression(node.target)
+            return f"{indent}{tgt} = {self._translate_expression(node.value)};\n"
+        
         if isinstance(node, MethodCall):
             return f"{indent}{self._translate_expression(node)};\n"
         if isinstance(node, ReturnStmt):

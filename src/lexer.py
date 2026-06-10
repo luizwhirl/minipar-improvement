@@ -24,6 +24,7 @@ class TokenType(Enum):
     SEND      = auto()
     RECEIVE   = auto()
     PRINT     = auto()
+    MATRIX    = auto() # Keyword para criar matriz
 
     PLUS      = auto()
     MINUS     = auto()
@@ -40,6 +41,8 @@ class TokenType(Enum):
     RPAREN    = auto()
     LBRACE    = auto()
     RBRACE    = auto()
+    LBRACKET  = auto() # [
+    RBRACKET  = auto() # ]
     DOT       = auto()
     SEMICOLON = auto()
     COMMA     = auto()
@@ -64,6 +67,7 @@ KEYWORDS: dict[str, TokenType] = {
     "c_channel": TokenType.C_CHANNEL,
     "send":      TokenType.SEND,
     "receive":   TokenType.RECEIVE,
+    "matrix":    TokenType.MATRIX,
 }
 
 @dataclass
@@ -137,7 +141,7 @@ class Lexer:
                 tokens.append(self._make_token(TokenType.STRING_LITERAL, text, start_line, start_col))
             else:
                 op = self._advance()
-                single_map = {"+": TokenType.PLUS, "-": TokenType.MINUS, "*": TokenType.STAR, "/": TokenType.SLASH, "{": TokenType.LBRACE, "}": TokenType.RBRACE, "(": TokenType.LPAREN, ")": TokenType.RPAREN, ";": TokenType.SEMICOLON, ",": TokenType.COMMA, ".": TokenType.DOT}
+                single_map = {"+": TokenType.PLUS, "-": TokenType.MINUS, "*": TokenType.STAR, "/": TokenType.SLASH, "{": TokenType.LBRACE, "}": TokenType.RBRACE, "(": TokenType.LPAREN, ")": TokenType.RPAREN, "[": TokenType.LBRACKET, "]": TokenType.RBRACKET, ";": TokenType.SEMICOLON, ",": TokenType.COMMA, ".": TokenType.DOT}
                 if op == "=":
                     if self._peek() == "=":
                         self._advance()
