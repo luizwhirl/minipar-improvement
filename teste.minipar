@@ -1,4 +1,6 @@
 seq {
-    var a = 2 + 3 * 4;
-    print("resultado", a, (10 - 2) / 4);
+    var x = 10;
+    var y = 20;
+    var z = x + y * 2 - (5 / 1);
+    print("Resultado de z:", z);
 }
