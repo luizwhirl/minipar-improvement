@@ -1,0 +1,10 @@
+seq {
+    print("=== CLIENTE INICIADO ===");
+    var canal = c_channel("127.0.0.1", 8080);
+    print("Conectando ao servidor 127.0.0.1:8080...");
+    
+    send(canal, "Ola, Servidor! Aqui e o Cliente testando os Sockets Reais no Windows.");
+    
+    print("Mensagem enviada com sucesso!");
+    print("=== CLIENTE FINALIZADO ===");
+}

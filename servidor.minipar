@@ -1,0 +1,10 @@
+seq {
+    print("=== SERVIDOR INICIADO ===");
+    var canal = c_channel("127.0.0.1", 8080);
+    print("Aguardando conexao na porta 8080...");
+    
+    var msg = receive(canal);
+    
+    print("Mensagem recebida do cliente:", msg);
+    print("=== SERVIDOR FINALIZADO ===");
+}
