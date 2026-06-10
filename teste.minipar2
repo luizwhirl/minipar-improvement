@@ -1,0 +1,4 @@
+seq {
+    var a;
+    var b;
+}
