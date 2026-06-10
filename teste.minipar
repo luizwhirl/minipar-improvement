@@ -1,7 +1,15 @@
 seq {
-    var texto = "Ola,\tMundo!\n";
-    var num = -5 + +15;
-    print(texto, "Valor de num:", num);
-    num = num * 2;
-    print("Num duplicado:", num);
+    var contador = 5;
+    print("Iniciando laco de repeticao!");
+
+    while (contador > 0) {
+        if (contador == 3) {
+            print("Chegamos na metade! Contador:", contador);
+        } else {
+            print("Rodando... Contador:", contador);
+        }
+        contador = contador - 1;
+    }
+    
+    print("Laco encerrado com sucesso.");
 }

@@ -1,9 +1,6 @@
-"""
-codegen.py — Gerador de Código C++ do compilador MiniPar
-"""
 from __future__ import annotations
 import os
-import subprocess
+import subprocess   
 import sys
 from typing import Optional
 
@@ -11,6 +8,7 @@ from ast_nodes import (
     ASTNode, Program, VarDecl, Assignment, PrintStmt,
     SeqBlock, ParBlock, BinaryExpr, UnaryExpr,
     NumberExpr, StringExpr, IdentifierExpr,
+    IfStmt, WhileStmt
 )
 
 # Cabeçalho C++ fixo gerado em todo programa MiniPar
@@ -50,7 +48,6 @@ class CppCodeGenerator:
 
     @staticmethod
     def _escape_string(value: str) -> str:
-        """Escapa caracteres especiais para uso em strings C++."""
         result = []
         for ch in value:
             if ch == "\n":
@@ -66,7 +63,6 @@ class CppCodeGenerator:
         return "".join(result)
 
     def _translate_expression(self, node: Optional[ASTNode]) -> str:
-        """Traduz um nó de expressão para C++."""
         if node is None:
             return "0"
         if isinstance(node, NumberExpr):
@@ -84,7 +80,6 @@ class CppCodeGenerator:
         return "0"
 
     def _translate_statement(self, node: Optional[ASTNode], indent: str = "") -> str:
-        """Traduz um nó de instrução para C++."""
         if node is None:
             return ""
 
@@ -125,10 +120,38 @@ class CppCodeGenerator:
             lines.append(f"{indent}}}\n")
             return "".join(lines)
 
+        if isinstance(node, WhileStmt):
+            cond = self._translate_expression(node.condition)
+            res = f"{indent}while ({cond})\n"
+            if isinstance(node.body, (SeqBlock, ParBlock)):
+                res += self._translate_statement(node.body, indent)
+            else:
+                res += self._translate_statement(node.body, indent + "    ")
+            return res
+
+        if isinstance(node, IfStmt):
+            cond = self._translate_expression(node.condition)
+            res = f"{indent}if ({cond})\n"
+            
+            if isinstance(node.then_branch, (SeqBlock, ParBlock)):
+                res += self._translate_statement(node.then_branch, indent)
+            else:
+                res += self._translate_statement(node.then_branch, indent + "    ")
+                
+            if node.else_branch:
+                res = res.rstrip() + f"\n{indent}else\n"
+                
+                if isinstance(node.else_branch, (SeqBlock, ParBlock)):
+                    res += self._translate_statement(node.else_branch, indent)
+                elif isinstance(node.else_branch, IfStmt):
+                    res = res.rstrip() + " " + self._translate_statement(node.else_branch, indent).lstrip()
+                else:
+                    res += self._translate_statement(node.else_branch, indent + "    ")
+            return res
+
         return ""
 
     def _translate_node(self, node: Optional[ASTNode]) -> str:
-        """Traduz um nó de alto nível (ex.: SeqBlock raiz) para C++."""
         if node is None:
             return ""
 
@@ -150,13 +173,6 @@ class CppCodeGenerator:
     # ------------------------------------------------------------------ #
 
     def generate(self, program: Program, output_name: str) -> None:
-        """
-        Gera o código C++ a partir do programa e compila com g++.
-
-        Args:
-            program:     AST do programa MiniPar.
-            output_name: Nome base do arquivo de saída (sem extensão).
-        """
         cpp_code = _CPP_HEADER
         for node in program.statements:
             cpp_code += self._translate_node(node)

@@ -1,6 +1,3 @@
-"""
-semantic.py — Analisador Semântico do compilador MiniPar
-"""
 from __future__ import annotations
 import sys
 from dataclasses import dataclass
@@ -9,6 +6,7 @@ from typing import Dict, List, Optional
 from ast_nodes import (
     ASTNode, Program, VarDecl, Assignment, PrintStmt,
     IdentifierExpr, BinaryExpr, UnaryExpr, SeqBlock, ParBlock,
+    IfStmt, WhileStmt
 )
 
 
@@ -102,6 +100,16 @@ class SemanticAnalyzer:
             for stmt in node.statements:
                 self.validate_node(stmt)
             self._exit_scope()
+
+        elif isinstance(node, IfStmt):
+            self.validate_node(node.condition)
+            self.validate_node(node.then_branch)
+            if node.else_branch:
+                self.validate_node(node.else_branch)
+
+        elif isinstance(node, WhileStmt):
+            self.validate_node(node.condition)
+            self.validate_node(node.body)
 
     # ------------------------------------------------------------------ #
     # Ponto de entrada                                                     #

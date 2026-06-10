@@ -1,6 +1,3 @@
-"""
-parser.py — Analisador Sintático do compilador MiniPar
-"""
 from __future__ import annotations
 import sys
 from typing import List
@@ -10,6 +7,7 @@ from ast_nodes import (
     ASTNode, Program, VarDecl, Assignment, PrintStmt,
     SeqBlock, ParBlock, BinaryExpr, UnaryExpr,
     NumberExpr, StringExpr, IdentifierExpr,
+    IfStmt, WhileStmt
 )
 
 
@@ -51,7 +49,7 @@ class Parser:
         sys.exit(1)
 
     # ------------------------------------------------------------------ #
-    # Parsing de declarações                                               #
+    # Parsing de declarações e comandos                                    #
     # ------------------------------------------------------------------ #
 
     def _parse_var_decl(self) -> ASTNode:
@@ -100,6 +98,28 @@ class Parser:
         self._consume(TokenType.RBRACE, "Esperado '}' para fechar bloco PAR")
         return node
 
+    def _parse_if_stmt(self) -> ASTNode:
+        line = self._tokens[self._pos - 1].line
+        self._consume(TokenType.LPAREN, "Esperado '(' apos 'if'")
+        condition = self._parse_expression()
+        self._consume(TokenType.RPAREN, "Esperado ')' apos condicao do 'if'")
+        then_branch = self._parse_statement()
+        
+        else_branch = None
+        if self._match(TokenType.ELSE):
+            else_branch = self._parse_statement()
+            
+        return IfStmt(condition=condition, then_branch=then_branch, else_branch=else_branch, line=line)
+
+    def _parse_while_stmt(self) -> ASTNode:
+        line = self._tokens[self._pos - 1].line
+        self._consume(TokenType.LPAREN, "Esperado '(' apos 'while'")
+        condition = self._parse_expression()
+        self._consume(TokenType.RPAREN, "Esperado ')' apos condicao do 'while'")
+        body = self._parse_statement()
+        
+        return WhileStmt(condition=condition, body=body, line=line)
+
     def _parse_statement(self) -> ASTNode:
         if self._match(TokenType.VAR):
             return self._parse_var_decl()
@@ -107,8 +127,14 @@ class Parser:
             return self._parse_seq_block()
         if self._match(TokenType.PAR):
             return self._parse_par_block()
+        if self._peek().type == TokenType.LBRACE:
+            return self._parse_seq_block()
         if self._match(TokenType.PRINT):
             return self._parse_print_stmt()
+        if self._match(TokenType.IF):
+            return self._parse_if_stmt()
+        if self._match(TokenType.WHILE):
+            return self._parse_while_stmt()
 
         # Atribuição: IDENTIFIER seguido de '='
         if (self._peek().type == TokenType.IDENTIFIER
@@ -124,11 +150,21 @@ class Parser:
         sys.exit(1)
 
     # ------------------------------------------------------------------ #
-    # Parsing de expressões (precedência: + - > * / > unário > primário)  #
+    # Parsing de expressões                                                #
     # ------------------------------------------------------------------ #
 
     def _parse_expression(self) -> ASTNode:
-        return self._parse_term()
+        return self._parse_comparison()
+
+    def _parse_comparison(self) -> ASTNode:
+        expr = self._parse_term()
+        comp_tokens = (TokenType.EQ, TokenType.NEQ, TokenType.LT, TokenType.GT, TokenType.LTE, TokenType.GTE)
+        while self._peek().type in comp_tokens:
+            op_tok = self._advance()
+            node = BinaryExpr(op=op_tok.lexeme, left=expr, right=self._parse_term())
+            node.line = op_tok.line
+            expr = node
+        return expr
 
     def _parse_term(self) -> ASTNode:
         expr = self._parse_factor()

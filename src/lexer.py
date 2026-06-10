@@ -1,6 +1,3 @@
-"""
-lexer.py — Analisador Léxico do compilador MiniPar
-"""
 from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum, auto
@@ -37,6 +34,10 @@ class TokenType(Enum):
     ASSIGN    = auto()
     EQ        = auto()
     NEQ       = auto()
+    LT        = auto()  # <
+    GT        = auto()  # >
+    LTE       = auto()  # <=
+    GTE       = auto()  # >=
     LPAREN    = auto()
     RPAREN    = auto()
     LBRACE    = auto()
@@ -195,6 +196,18 @@ class Lexer:
                         tokens.append(self._make_token(TokenType.NEQ, "!=", start_line, start_col))
                     else:
                         tokens.append(self._make_token(TokenType.UNKNOWN, op, start_line, start_col))
+                elif op == "<":
+                    if self._peek() == "=":
+                        self._advance()
+                        tokens.append(self._make_token(TokenType.LTE, "<=", start_line, start_col))
+                    else:
+                        tokens.append(self._make_token(TokenType.LT, "<", start_line, start_col))
+                elif op == ">":
+                    if self._peek() == "=":
+                        self._advance()
+                        tokens.append(self._make_token(TokenType.GTE, ">=", start_line, start_col))
+                    else:
+                        tokens.append(self._make_token(TokenType.GT, ">", start_line, start_col))
                 elif op in single_map:
                     tokens.append(self._make_token(single_map[op], op, start_line, start_col))
                 else:

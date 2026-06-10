@@ -1,13 +1,9 @@
-"""
-ast_nodes.py — Nós da Árvore Sintática Abstrata (AST) do compilador MiniPar
-"""
 from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import List, Optional
 
 
 class ASTNode:
-    """Superclasse de todos os nós da AST."""
     line: int = 1
 
 
@@ -74,6 +70,21 @@ class SeqBlock(ASTNode):
 @dataclass
 class ParBlock(ASTNode):
     statements: List[ASTNode] = field(default_factory=list)
+    line: int = 1
+
+
+@dataclass
+class IfStmt(ASTNode):
+    condition: ASTNode
+    then_branch: ASTNode
+    else_branch: Optional[ASTNode] = None
+    line: int = 1
+
+
+@dataclass
+class WhileStmt(ASTNode):
+    condition: ASTNode
+    body: ASTNode
     line: int = 1
 
 
