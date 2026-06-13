@@ -4,7 +4,8 @@ from typing import List
 from lexer import Token, TokenType
 from ast_nodes import (
     ASTNode, Program, VarDecl, Assignment, PrintStmt, SeqBlock, ParBlock, 
-    BinaryExpr, UnaryExpr, NumberExpr, StringExpr, IdentifierExpr, IfStmt, WhileStmt,
+    BinaryExpr, UnaryExpr, NumberExpr, StringExpr, BoolExpr, IdentifierExpr, IfStmt, WhileStmt,
+    DoWhileStmt, ForStmt, BreakStmt, ContinueStmt, InputExpr,
     ClassDecl, FuncDecl, ReturnStmt, MethodCall, FuncCallExpr, PropertyAccess, PropertyAssign, NewExpr, ThisExpr,
     CChannelExpr, SendStmt, ReceiveExpr, ListLiteral, MatrixCreateExpr, IndexExpr, IndexAssign
 )
@@ -35,14 +36,25 @@ class Parser:
         print(f"[ERRO SINTATICO] Linha {tok.line}: {err_msg} (Encontrado: {tok.lexeme!r})", file=sys.stderr)
         sys.exit(1)
 
-    def _parse_var_decl(self) -> ASTNode:
+    def _parse_var_decl(self, declared_type: str = "var", require_semicolon: bool = True) -> ASTNode:
         node = VarDecl(name="")
         node.line = self._peek().line
+        node.type = declared_type
         node.name = self._consume(TokenType.IDENTIFIER, "Esperado nome da variavel").lexeme
         if self._match(TokenType.ASSIGN):
             node.init_value = self._parse_expression()
-        self._consume(TokenType.SEMICOLON, "Esperado ';' apos declaracao de variavel")
+        if require_semicolon:
+            self._consume(TokenType.SEMICOLON, "Esperado ';' apos declaracao de variavel")
         return node
+
+    def _parse_assignment_tail(self, target: ASTNode, require_semicolon: bool = True) -> ASTNode:
+        val = self._parse_expression()
+        if require_semicolon:
+            self._consume(TokenType.SEMICOLON, "Esperado ';'")
+        if isinstance(target, IdentifierExpr): return Assignment(name=target.name, value=val, line=target.line)
+        if isinstance(target, PropertyAccess): return PropertyAssign(object=target.object, property_name=target.property_name, value=val, line=target.line)
+        if isinstance(target, IndexExpr): return IndexAssign(target=target, value=val, line=target.line)
+        sys.exit(print(f"[ERRO] Linha {target.line}: Atribuicao invalida", file=sys.stderr) or 1)
 
     def _parse_print_stmt(self) -> ASTNode:
         node = PrintStmt()
@@ -99,6 +111,59 @@ class Parser:
         body = self._parse_statement()
         return WhileStmt(condition=condition, body=body, line=line)
 
+    def _parse_do_while_stmt(self) -> ASTNode:
+        line = self._tokens[self._pos - 1].line
+        body = self._parse_statement()
+        self._consume(TokenType.WHILE, "Esperado 'while' apos bloco do")
+        self._consume(TokenType.LPAREN, "Esperado '(' apos 'while'")
+        condition = self._parse_expression()
+        self._consume(TokenType.RPAREN, "Esperado ')' apos condicao")
+        self._match(TokenType.SEMICOLON)
+        return DoWhileStmt(body=body, condition=condition, line=line)
+
+    def _parse_for_stmt(self) -> ASTNode:
+        line = self._tokens[self._pos - 1].line
+        self._consume(TokenType.LPAREN, "Esperado '(' apos 'for'")
+        initializer = condition = increment = iterator_name = iterable = None
+
+        if self._match(TokenType.VAR):
+            name_tok = self._consume(TokenType.IDENTIFIER, "Esperado variavel do for")
+            if self._match(TokenType.IN):
+                iterator_name = name_tok.lexeme
+                iterable = self._parse_expression()
+                self._consume(TokenType.RPAREN, "Esperado ')' apos iteravel")
+                body = self._parse_statement()
+                return ForStmt(None, None, None, body, iterator_name, iterable, line)
+            initializer = VarDecl(name=name_tok.lexeme, type="var", line=name_tok.line)
+            if self._match(TokenType.ASSIGN):
+                initializer.init_value = self._parse_expression()
+            self._consume(TokenType.SEMICOLON, "Esperado ';' apos inicializador do for")
+        elif self._peek().type == TokenType.TYPE:
+            type_tok = self._advance()
+            initializer = self._parse_var_decl(type_tok.lexeme, require_semicolon=False)
+            self._consume(TokenType.SEMICOLON, "Esperado ';' apos inicializador do for")
+        elif not self._match(TokenType.SEMICOLON):
+            target = self._parse_expression()
+            if self._match(TokenType.ASSIGN):
+                initializer = self._parse_assignment_tail(target, require_semicolon=False)
+            else:
+                initializer = target
+            self._consume(TokenType.SEMICOLON, "Esperado ';' apos inicializador do for")
+
+        if not self._match(TokenType.SEMICOLON):
+            condition = self._parse_expression()
+            self._consume(TokenType.SEMICOLON, "Esperado ';' apos condicao do for")
+
+        if self._peek().type != TokenType.RPAREN:
+            target = self._parse_expression()
+            if self._match(TokenType.ASSIGN):
+                increment = self._parse_assignment_tail(target, require_semicolon=False)
+            else:
+                increment = target
+        self._consume(TokenType.RPAREN, "Esperado ')' apos for")
+        body = self._parse_statement()
+        return ForStmt(initializer, condition, increment, body, line=line)
+
     def _parse_class_decl(self) -> ASTNode:
         line = self._tokens[self._pos - 1].line
         name = self._consume(TokenType.IDENTIFIER, "Esperado nome da classe").lexeme
@@ -118,8 +183,12 @@ class Parser:
         self._consume(TokenType.LPAREN, "Esperado '('")
         params = []
         if self._peek().type != TokenType.RPAREN:
+            if self._peek().type == TokenType.TYPE:
+                self._advance()
             params.append(self._consume(TokenType.IDENTIFIER, "Esperado parametro").lexeme)
             while self._match(TokenType.COMMA):
+                if self._peek().type == TokenType.TYPE:
+                    self._advance()
                 params.append(self._consume(TokenType.IDENTIFIER, "Esperado parametro").lexeme)
         self._consume(TokenType.RPAREN, "Esperado ')'")
         body = self._parse_seq_block()
@@ -128,14 +197,25 @@ class Parser:
     def _parse_return_stmt(self) -> ASTNode:
         line = self._tokens[self._pos - 1].line
         value = None if self._peek().type == TokenType.SEMICOLON else self._parse_expression()
-        self._consume(TokenType.SEMICOLON, "Esperado ';'")
+        self._match(TokenType.SEMICOLON)
         return ReturnStmt(value=value, line=line)
 
     def _parse_statement(self) -> ASTNode:
         if self._match(TokenType.CLASS): return self._parse_class_decl()
         if self._match(TokenType.FUNC): return self._parse_func_decl()
         if self._match(TokenType.RETURN): return self._parse_return_stmt()
+        if self._match(TokenType.BREAK):
+            line = self._tokens[self._pos - 1].line
+            self._match(TokenType.SEMICOLON)
+            return BreakStmt(line=line)
+        if self._match(TokenType.CONTINUE):
+            line = self._tokens[self._pos - 1].line
+            self._match(TokenType.SEMICOLON)
+            return ContinueStmt(line=line)
         if self._match(TokenType.VAR): return self._parse_var_decl()
+        if self._peek().type == TokenType.TYPE:
+            type_tok = self._advance()
+            return self._parse_var_decl(type_tok.lexeme)
         if self._match(TokenType.SEQ) or self._peek().type == TokenType.LBRACE: 
             if self._peek().type == TokenType.SEQ: self._advance()
             return self._parse_seq_block()
@@ -144,16 +224,13 @@ class Parser:
         if self._match(TokenType.SEND): return self._parse_send_stmt()
         if self._match(TokenType.IF): return self._parse_if_stmt()
         if self._match(TokenType.WHILE): return self._parse_while_stmt()
+        if self._match(TokenType.DO): return self._parse_do_while_stmt()
+        if self._match(TokenType.FOR): return self._parse_for_stmt()
 
-        if self._peek().type in (TokenType.IDENTIFIER, TokenType.THIS, TokenType.NEW, TokenType.RECEIVE, TokenType.C_CHANNEL, TokenType.MATRIX, TokenType.LBRACKET):
+        if self._peek().type in (TokenType.IDENTIFIER, TokenType.THIS, TokenType.NEW, TokenType.RECEIVE, TokenType.INPUT, TokenType.C_CHANNEL, TokenType.MATRIX, TokenType.LBRACKET):
             expr = self._parse_expression()
             if self._match(TokenType.ASSIGN):
-                val = self._parse_expression()
-                self._consume(TokenType.SEMICOLON, "Esperado ';'")
-                if isinstance(expr, IdentifierExpr): return Assignment(name=expr.name, value=val, line=expr.line)
-                elif isinstance(expr, PropertyAccess): return PropertyAssign(object=expr.object, property_name=expr.property_name, value=val, line=expr.line)
-                elif isinstance(expr, IndexExpr): return IndexAssign(target=expr, value=val, line=expr.line)
-                else: sys.exit(print(f"[ERRO] Linha {expr.line}: Atribuicao invalida", file=sys.stderr) or 1)
+                return self._parse_assignment_tail(expr)
             elif isinstance(expr, (MethodCall, FuncCallExpr)):
                 self._consume(TokenType.SEMICOLON, "Esperado ';'")
                 return expr
@@ -163,7 +240,21 @@ class Parser:
         sys.exit(print(f"[ERRO SINTATICO] Linha {tok.line}: Instrucao nao reconhecida: {tok.lexeme!r}", file=sys.stderr) or 1)
 
     def _parse_expression(self) -> ASTNode:
-        return self._parse_comparison()
+        return self._parse_or()
+
+    def _parse_or(self) -> ASTNode:
+        expr = self._parse_and()
+        while self._match(TokenType.OR):
+            op_tok = self._tokens[self._pos - 1]
+            expr = BinaryExpr(op=op_tok.lexeme, left=expr, right=self._parse_and(), line=op_tok.line)
+        return expr
+
+    def _parse_and(self) -> ASTNode:
+        expr = self._parse_comparison()
+        while self._match(TokenType.AND):
+            op_tok = self._tokens[self._pos - 1]
+            expr = BinaryExpr(op=op_tok.lexeme, left=expr, right=self._parse_comparison(), line=op_tok.line)
+        return expr
 
     def _parse_comparison(self) -> ASTNode:
         expr = self._parse_term()
@@ -185,7 +276,7 @@ class Parser:
 
     def _parse_factor(self) -> ASTNode:
         expr = self._parse_unary()
-        while self._peek().type in (TokenType.STAR, TokenType.SLASH):
+        while self._peek().type in (TokenType.STAR, TokenType.SLASH, TokenType.MOD):
             op_tok = self._advance()
             node = BinaryExpr(op=op_tok.lexeme, left=expr, right=self._parse_unary())
             node.line = op_tok.line
@@ -193,7 +284,7 @@ class Parser:
         return expr
 
     def _parse_unary(self) -> ASTNode:
-        if self._peek().type in (TokenType.MINUS, TokenType.PLUS):
+        if self._peek().type in (TokenType.MINUS, TokenType.PLUS, TokenType.NOT):
             op_tok = self._advance()
             node = UnaryExpr(op=op_tok.lexeme, operand=self._parse_unary())
             node.line = op_tok.line
@@ -236,6 +327,12 @@ class Parser:
             channel = self._parse_expression()
             self._consume(TokenType.RPAREN, "Esperado ')'")
             node = ReceiveExpr(channel=channel, line=line)
+        elif self._match(TokenType.INPUT):
+            line = tok.line
+            self._consume(TokenType.LPAREN, "Esperado '(' apos input")
+            prompt = None if self._peek().type == TokenType.RPAREN else self._parse_expression()
+            self._consume(TokenType.RPAREN, "Esperado ')' apos input")
+            node = InputExpr(prompt=prompt, line=line)
         elif self._match(TokenType.NEW):
             line = tok.line
             class_name = self._consume(TokenType.IDENTIFIER, "Esperado nome da classe").lexeme
@@ -252,6 +349,8 @@ class Parser:
             node = NumberExpr(value=tok.lexeme, line=tok.line)
         elif self._match(TokenType.STRING_LITERAL):
             node = StringExpr(value=tok.lexeme, line=tok.line)
+        elif self._match(TokenType.BOOL_LITERAL):
+            node = BoolExpr(value=(tok.lexeme == "true"), line=tok.line)
         elif self._match(TokenType.IDENTIFIER):
             name = tok.lexeme
             if self._match(TokenType.LPAREN):

@@ -1,0 +1,18 @@
+seq {
+    print("==== Calculadora cliente-servidor ====");
+    var requisicao = c_channel("127.0.0.1", 5101);
+    var resposta = c_channel("127.0.0.1", 5102);
+
+    par {
+        seq {
+            var pedido = receive(requisicao);
+            print("Servidor recebeu:", pedido);
+            send(resposta, "Resultado: 12");
+        }
+        seq {
+            send(requisicao, "+ 7 5");
+            var resultado = receive(resposta);
+            print(resultado);
+        }
+    }
+}

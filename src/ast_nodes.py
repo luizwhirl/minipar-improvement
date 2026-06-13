@@ -16,6 +16,11 @@ class StringExpr(ASTNode):
     line: int = 1
 
 @dataclass
+class BoolExpr(ASTNode):
+    value: bool
+    line: int = 1
+
+@dataclass
 class IdentifierExpr(ASTNode):
     name: str
     line: int = 1
@@ -72,6 +77,30 @@ class IfStmt(ASTNode):
 class WhileStmt(ASTNode):
     condition: ASTNode
     body: ASTNode
+    line: int = 1
+
+@dataclass
+class DoWhileStmt(ASTNode):
+    body: ASTNode
+    condition: ASTNode
+    line: int = 1
+
+@dataclass
+class ForStmt(ASTNode):
+    initializer: Optional[ASTNode]
+    condition: Optional[ASTNode]
+    increment: Optional[ASTNode]
+    body: ASTNode
+    iterator_name: Optional[str] = None
+    iterable: Optional[ASTNode] = None
+    line: int = 1
+
+@dataclass
+class BreakStmt(ASTNode):
+    line: int = 1
+
+@dataclass
+class ContinueStmt(ASTNode):
     line: int = 1
 
 @dataclass
@@ -145,6 +174,11 @@ class SendStmt(ASTNode):
 @dataclass
 class ReceiveExpr(ASTNode):
     channel: ASTNode
+    line: int = 1
+
+@dataclass
+class InputExpr(ASTNode):
+    prompt: Optional[ASTNode] = None
     line: int = 1
 
 @dataclass

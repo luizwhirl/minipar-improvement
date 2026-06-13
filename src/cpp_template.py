@@ -32,6 +32,23 @@ std::string input() {
     return s;
 }
 
+std::string input(const std::string& prompt) {
+    std::cout << prompt;
+    return input();
+}
+
+std::vector<int> __minipar_range(int end) {
+    std::vector<int> values;
+    for (int i = 0; i < end; ++i) values.push_back(i);
+    return values;
+}
+
+std::vector<int> __minipar_range(int start, int end) {
+    std::vector<int> values;
+    for (int i = start; i < end; ++i) values.push_back(i);
+    return values;
+}
+
 // Helper para Arrays (.pop) do Python
 template<typename T>
 auto __array_pop(std::vector<T>& v) {

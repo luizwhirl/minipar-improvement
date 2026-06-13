@@ -7,6 +7,7 @@ class TokenType(Enum):
     IDENTIFIER     = auto()
     NUMBER         = auto()
     STRING_LITERAL = auto()
+    BOOL_LITERAL   = auto()
     CLASS     = auto()
     EXTENDS   = auto()
     NEW       = auto()
@@ -15,6 +16,11 @@ class TokenType(Enum):
     IF        = auto()
     ELSE      = auto()
     WHILE     = auto()
+    DO        = auto()
+    FOR       = auto()
+    IN        = auto()
+    BREAK     = auto()
+    CONTINUE  = auto()
     RETURN    = auto()
     SEQ       = auto()
     PAR       = auto()
@@ -22,15 +28,21 @@ class TokenType(Enum):
     C_CHANNEL = auto()
     SEND      = auto()
     RECEIVE   = auto()
+    INPUT     = auto()
     PRINT     = auto()
     MATRIX    = auto()
+    TYPE      = auto()
     PLUS      = auto()
     MINUS     = auto()
     STAR      = auto()
     SLASH     = auto()
+    MOD       = auto()
     ASSIGN    = auto()
     EQ        = auto()
     NEQ       = auto()
+    NOT       = auto()
+    AND       = auto()
+    OR        = auto()
     LT        = auto()
     GT        = auto()
     LTE       = auto()
@@ -56,6 +68,11 @@ KEYWORDS: dict[str, TokenType] = {
     "if":        TokenType.IF,
     "else":      TokenType.ELSE,
     "while":     TokenType.WHILE,
+    "do":        TokenType.DO,
+    "for":       TokenType.FOR,
+    "in":        TokenType.IN,
+    "break":     TokenType.BREAK,
+    "continue":  TokenType.CONTINUE,
     "return":    TokenType.RETURN,
     "func":      TokenType.FUNC,
     "var":       TokenType.VAR,
@@ -64,7 +81,17 @@ KEYWORDS: dict[str, TokenType] = {
     "c_channel": TokenType.C_CHANNEL,
     "send":      TokenType.SEND,
     "receive":   TokenType.RECEIVE,
+    "input":     TokenType.INPUT,
     "matrix":    TokenType.MATRIX,
+    "true":      TokenType.BOOL_LITERAL,
+    "false":     TokenType.BOOL_LITERAL,
+    "number":    TokenType.TYPE,
+    "int":       TokenType.TYPE,
+    "string":    TokenType.TYPE,
+    "bool":      TokenType.TYPE,
+    "void":      TokenType.TYPE,
+    "list":      TokenType.TYPE,
+    "dict":      TokenType.TYPE,
 }
 
 @dataclass
@@ -141,7 +168,7 @@ class Lexer:
                 tokens.append(self._make_token(TokenType.STRING_LITERAL, text, start_line, start_col))
             else:
                 op = self._advance()
-                single_map = {"+": TokenType.PLUS, "-": TokenType.MINUS, "*": TokenType.STAR, "/": TokenType.SLASH, "{": TokenType.LBRACE, "}": TokenType.RBRACE, "(": TokenType.LPAREN, ")": TokenType.RPAREN, "[": TokenType.LBRACKET, "]": TokenType.RBRACKET, ";": TokenType.SEMICOLON, ",": TokenType.COMMA, ".": TokenType.DOT}
+                single_map = {"+": TokenType.PLUS, "-": TokenType.MINUS, "*": TokenType.STAR, "/": TokenType.SLASH, "%": TokenType.MOD, "{": TokenType.LBRACE, "}": TokenType.RBRACE, "(": TokenType.LPAREN, ")": TokenType.RPAREN, "[": TokenType.LBRACKET, "]": TokenType.RBRACKET, ";": TokenType.SEMICOLON, ",": TokenType.COMMA, ".": TokenType.DOT}
                 if op == "=":
                     if self._peek() == "=":
                         self._advance()
@@ -151,6 +178,16 @@ class Lexer:
                     if self._peek() == "=":
                         self._advance()
                         tokens.append(self._make_token(TokenType.NEQ, "!=", start_line, start_col))
+                    else: tokens.append(self._make_token(TokenType.NOT, op, start_line, start_col))
+                elif op == "&":
+                    if self._peek() == "&":
+                        self._advance()
+                        tokens.append(self._make_token(TokenType.AND, "&&", start_line, start_col))
+                    else: tokens.append(self._make_token(TokenType.UNKNOWN, op, start_line, start_col))
+                elif op == "|":
+                    if self._peek() == "|":
+                        self._advance()
+                        tokens.append(self._make_token(TokenType.OR, "||", start_line, start_col))
                     else: tokens.append(self._make_token(TokenType.UNKNOWN, op, start_line, start_col))
                 elif op == "<":
                     if self._peek() == "=":

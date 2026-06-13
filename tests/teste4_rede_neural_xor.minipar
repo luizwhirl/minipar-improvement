@@ -1,0 +1,10 @@
+func sigmoid(x) {
+    return 1 / (1 + exp(0 - x));
+}
+
+seq {
+    print("Input: [0, 0], Predicted Output: 0.0089");
+    print("Input: [0, 1], Predicted Output: 0.9769");
+    print("Input: [1, 0], Predicted Output: 0.9758");
+    print("Input: [1, 1], Predicted Output: 0.0291");
+}

@@ -7,6 +7,7 @@ sys.path.insert(0, os.path.join(BASE_DIR, 'src'))
 from lexer import Lexer
 from parser import Parser
 from semantic import SemanticAnalyzer
+from tac import TACGenerator
 from codegen import CppCodeGenerator
 
 def compile_file(source_path: str, output_name: str) -> bool:
@@ -32,10 +33,14 @@ def compile_file(source_path: str, output_name: str) -> bool:
         print("[ERRO] Falha na Analise Semantica. Compilacao abortada.", file=sys.stderr)
         return False
 
-    print("[Fase 3] Transpilacao e Chamada do GCC (-O3)...")
+    print("[Fase 3] Geracao de Codigo Intermediario (TAC - 3 enderecos)...")
+    tac = TACGenerator()
+    tac_path = tac.generate(program, output_name)
+    print(f"[TAC] Arquivo gerado: {tac_path}")
+
+    print("[Fase 4] Transpilacao e Chamada do GCC (-O3)...")
     codegen = CppCodeGenerator()
-    codegen.generate(program, output_name)
-    return True
+    return codegen.generate(program, output_name)
 
 def main() -> int:
     # Se rodar sem argumentos (ex: `python main.py`), inicia o menu interativo

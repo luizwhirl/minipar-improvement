@@ -5,7 +5,8 @@ import sys
 from typing import Optional
 from ast_nodes import (
     ASTNode, Program, VarDecl, Assignment, PrintStmt, SeqBlock, ParBlock, BinaryExpr, 
-    UnaryExpr, NumberExpr, StringExpr, IdentifierExpr, IfStmt, WhileStmt,
+    UnaryExpr, NumberExpr, StringExpr, BoolExpr, IdentifierExpr, IfStmt, WhileStmt,
+    DoWhileStmt, ForStmt, BreakStmt, ContinueStmt, InputExpr,
     ClassDecl, FuncDecl, ReturnStmt, MethodCall, FuncCallExpr, PropertyAccess, PropertyAssign, NewExpr, ThisExpr,
     CChannelExpr, SendStmt, ReceiveExpr, ListLiteral, MatrixCreateExpr, IndexExpr, IndexAssign
 )
@@ -27,6 +28,7 @@ class CppCodeGenerator:
         if node is None: return "0"
         if isinstance(node, NumberExpr): return node.value
         if isinstance(node, StringExpr): return f'"{self._escape_string(node.value)}"'
+        if isinstance(node, BoolExpr): return "true" if node.value else "false"
         if isinstance(node, IdentifierExpr): return node.name
         if isinstance(node, UnaryExpr): return f"({node.op}{self._translate_expression(node.operand)})"
         if isinstance(node, BinaryExpr):
@@ -50,9 +52,16 @@ class CppCodeGenerator:
         
         if isinstance(node, FuncCallExpr):
             args = ", ".join(self._translate_expression(a) for a in node.arguments)
-            # MAPEAMENTO DIRETO PARA EVITAR LOOP INFINITO EM REDES NEURAIS
             if node.name == "exp":
                 return f"std::exp({args})"
+            if node.name == "random":
+                return "random_val()"
+            if node.name == "len":
+                return f"{self._translate_expression(node.arguments[0])}.size()"
+            if node.name == "range":
+                return f"__minipar_range({args})"
+            if node.name == "to_number":
+                return f"std::stod({args})"
             return f"{node.name}({args})"
 
         if isinstance(node, CChannelExpr):
@@ -61,6 +70,10 @@ class CppCodeGenerator:
             return f"std::make_shared<MiniParChannel>({ip}, {port})"
         if isinstance(node, ReceiveExpr):
             return f"{self._translate_expression(node.channel)}->receiveData()"
+        if isinstance(node, InputExpr):
+            if node.prompt:
+                return f"input({self._translate_expression(node.prompt)})"
+            return "input()"
 
         if isinstance(node, ListLiteral):
             elems = ", ".join(self._translate_expression(e) for e in node.elements)
@@ -76,6 +89,17 @@ class CppCodeGenerator:
             return f"{obj}[{idx}]"
 
         return "0"
+
+    def _has_value_return(self, node: Optional[ASTNode]) -> bool:
+        if node is None: return False
+        if isinstance(node, ReturnStmt): return node.value is not None
+        if isinstance(node, (SeqBlock, ParBlock)):
+            return any(self._has_value_return(stmt) for stmt in node.statements)
+        if isinstance(node, IfStmt):
+            return self._has_value_return(node.then_branch) or self._has_value_return(node.else_branch)
+        if isinstance(node, (WhileStmt, DoWhileStmt, ForStmt)):
+            return self._has_value_return(node.body)
+        return False
 
     def _translate_statement(self, node: Optional[ASTNode], indent: str = "") -> str:
         if node is None: return ""
@@ -96,6 +120,10 @@ class CppCodeGenerator:
         if isinstance(node, ReturnStmt):
             val = self._translate_expression(node.value) if node.value else ""
             return f"{indent}return {val};\n"
+        if isinstance(node, BreakStmt):
+            return f"{indent}break;\n"
+        if isinstance(node, ContinueStmt):
+            return f"{indent}continue;\n"
         
         if isinstance(node, SendStmt):
             chan = self._translate_expression(node.channel)
@@ -103,7 +131,11 @@ class CppCodeGenerator:
             return f"{indent}{chan}->sendData(__to_string({msg}));\n"
 
         if isinstance(node, PrintStmt):
-            parts = [f" << {self._translate_expression(a)}" for a in node.arguments]
+            parts = []
+            for i, arg in enumerate(node.arguments):
+                if i > 0:
+                    parts.append(' << " "')
+                parts.append(f" << {self._translate_expression(arg)}")
             return f"{indent}std::cout{ ''.join(parts) } << std::endl;\n"
         
         if isinstance(node, SeqBlock):
@@ -121,6 +153,22 @@ class CppCodeGenerator:
             res = f"{indent}while ({self._translate_expression(node.condition)})\n"
             res += self._translate_statement(node.body, indent if isinstance(node.body, (SeqBlock, ParBlock)) else indent + "    ")
             return res
+        if isinstance(node, DoWhileStmt):
+            res = f"{indent}do\n"
+            res += self._translate_statement(node.body, indent if isinstance(node.body, (SeqBlock, ParBlock)) else indent + "    ").rstrip()
+            res += f"\n{indent}while ({self._translate_expression(node.condition)});\n"
+            return res
+        if isinstance(node, ForStmt):
+            if node.iterator_name and node.iterable:
+                res = f"{indent}for (auto {node.iterator_name} : {self._translate_expression(node.iterable)})\n"
+                res += self._translate_statement(node.body, indent if isinstance(node.body, (SeqBlock, ParBlock)) else indent + "    ")
+                return res
+            init = self._translate_for_part(node.initializer)
+            cond = self._translate_expression(node.condition) if node.condition else "true"
+            inc = self._translate_for_part(node.increment)
+            res = f"{indent}for ({init}; {cond}; {inc})\n"
+            res += self._translate_statement(node.body, indent if isinstance(node.body, (SeqBlock, ParBlock)) else indent + "    ")
+            return res
         if isinstance(node, IfStmt):
             res = f"{indent}if ({self._translate_expression(node.condition)})\n"
             res += self._translate_statement(node.then_branch, indent if isinstance(node.then_branch, (SeqBlock, ParBlock)) else indent + "    ")
@@ -133,7 +181,20 @@ class CppCodeGenerator:
             return res
         return ""
 
-    def generate(self, program: Program, output_name: str) -> None:
+    def _translate_for_part(self, node: Optional[ASTNode]) -> str:
+        if node is None: return ""
+        if isinstance(node, VarDecl):
+            expr = self._translate_expression(node.init_value) if node.init_value else "0"
+            return f"auto {node.name} = {expr}"
+        if isinstance(node, Assignment):
+            return f"{node.name} = {self._translate_expression(node.value)}"
+        if isinstance(node, PropertyAssign):
+            return f"{self._translate_expression(node.object)}->{node.property_name} = {self._translate_expression(node.value)}"
+        if isinstance(node, IndexAssign):
+            return f"{self._translate_expression(node.target)} = {self._translate_expression(node.value)}"
+        return self._translate_expression(node)
+
+    def generate(self, program: Program, output_name: str) -> bool:
         cpp_code = _CPP_HEADER
         
         for node in program.statements:
@@ -147,7 +208,8 @@ class CppCodeGenerator:
                         cpp_code += f"    double {attr.name} = 0;\n"
                 for method in node.methods:
                     params = ", ".join(f"auto {p}" for p in method.params)
-                    cpp_code += f"    auto {method.name}({params}) {{\n"
+                    ret = "auto" if self._has_value_return(method.body) else "void"
+                    cpp_code += f"    {ret} {method.name}({params}) {{\n"
                     if isinstance(method.body, SeqBlock):
                         for stmt in method.body.statements: cpp_code += self._translate_statement(stmt, "        ")
                     else: cpp_code += self._translate_statement(method.body, "        ")
@@ -155,7 +217,8 @@ class CppCodeGenerator:
                 cpp_code += "};\n\n"
             elif isinstance(node, FuncDecl):
                 params = ", ".join(f"auto {p}" for p in node.params)
-                cpp_code += f"auto {node.name}({params}) {{\n"
+                ret = "auto" if self._has_value_return(node.body) else "void"
+                cpp_code += f"{ret} {node.name}({params}) {{\n"
                 if isinstance(node.body, SeqBlock):
                     for stmt in node.body.statements: cpp_code += self._translate_statement(stmt, "    ")
                 else: cpp_code += self._translate_statement(node.body, "    ")
@@ -177,5 +240,8 @@ class CppCodeGenerator:
         
         print("[CODEGEN] Compilando via g++ com -std=c++20 e -O3...")
         result = subprocess.run(["g++", "-std=c++20", "-O3", cpp_path, "-o", exe_path, "-pthread", "-lws2_32"])
-        if result.returncode == 0: print(f"[SUCESSO] Executavel: {exe_path}")
-        else: print("[ERRO] Falha na compilacao.", file=sys.stderr)
+        if result.returncode == 0:
+            print(f"[SUCESSO] Executavel: {exe_path}")
+            return True
+        print("[ERRO] Falha na compilacao.", file=sys.stderr)
+        return False
