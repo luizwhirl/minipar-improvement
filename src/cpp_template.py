@@ -22,8 +22,7 @@ _CPP_HEADER = """\
   #define CLOSE_SOCK close
 #endif
 
-// Helper para Math e Random nativos para as Redes Neurais
-double exp(double x) { return std::exp(x); }
+// Helper para Random nativo
 double random_val() { return (double)rand() / RAND_MAX; }
 
 // Helper para Input

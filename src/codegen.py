@@ -50,6 +50,9 @@ class CppCodeGenerator:
         
         if isinstance(node, FuncCallExpr):
             args = ", ".join(self._translate_expression(a) for a in node.arguments)
+            # MAPEAMENTO DIRETO PARA EVITAR LOOP INFINITO EM REDES NEURAIS
+            if node.name == "exp":
+                return f"std::exp({args})"
             return f"{node.name}({args})"
 
         if isinstance(node, CChannelExpr):
@@ -137,7 +140,6 @@ class CppCodeGenerator:
             if isinstance(node, ClassDecl):
                 cpp_code += f"class {node.name}" + (f" : public {node.superclass}" if node.superclass else "") + " {\npublic:\n"
                 for attr in node.attributes:
-                    # RESOLVE O ERRO DE TIPAGEM NOS ATRIBUTOS DA CLASSE OOP
                     if attr.init_value:
                         init = self._translate_expression(attr.init_value)
                         cpp_code += f"    decltype({init}) {attr.name} = {init};\n"
