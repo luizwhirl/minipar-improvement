@@ -1,11 +1,11 @@
 # Programa de Teste 5: Sistema de Recomendacao E-commerce (Redes Neurais)
 func relu(x) {
-    if (x > 0) { return x; }
-    return 0;
+    if (x > 0.0) { return x; }
+    return 0.0;
 }
 
 func sigmoid(x) {
-    return 1 / (1 + exp(0 - x));
+    return 1.0 / (1.0 + exp(0.0 - x));
 }
 
 seq {
@@ -13,10 +13,10 @@ seq {
     
     # Historico codificado do usuario (1 = comprou, 0 = nao comprou)
     # Produtos catalogados: ["Smartphone", "Jeans", "Micro-ondas", "Ficcao"]
-    var historico = [1, 1, 0, 0]; 
+    var historico = [1.0, 1.0, 0.0, 0.0]; 
     
     # Pesos e bias simplificados para a rede neural
-    var pesos_ocultos = [0.2, -0.5, 0.8, 0.1];
+    var pesos_ocultos = [0.2, 0.0 - 0.5, 0.8, 0.1];
     var bias_oculto = 0.5;
     
     var pesos_saida = [0.5, 0.5, 0.5, 0.5];

@@ -1,5 +1,5 @@
 # Programa de Teste 1: Calculadora Cliente/Servidor
-c_channel calculadora("127.0.0.1", 8080);
+var calculadora = c_channel("127.0.0.1", 8080);
 
 seq {
     par {

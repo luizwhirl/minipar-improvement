@@ -1,17 +1,17 @@
 # Programa de Teste 3: Implementacao de um Neuronio
 class Neuronio {
-    var input_val = 0;
-    var output_desejado = 0;
+    var input_val = 0.0;
+    var output_desejado = 0.0;
     var peso = 0.5;
-    var bias = 1;
+    var bias = 1.0;
     var peso_bias = 0.5;
     var taxa_aprendizado = 0.01;
-    var erro = 1;
+    var erro = 1.0;
     var iteracao = 0;
 
     func ativacao(soma) {
-        if (soma >= 0) { return 1; }
-        return 0;
+        if (soma >= 0.0) { return 1.0; }
+        return 0.0;
     }
 
     func treinar() {
@@ -37,7 +37,7 @@ class Neuronio {
 
 seq {
     var n = new Neuronio();
-    n.input_val = 1;
-    n.output_desejado = 0;
+    n.input_val = 1.0;
+    n.output_desejado = 0.0;
     n.treinar();
 }

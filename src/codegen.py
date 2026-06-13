@@ -137,8 +137,12 @@ class CppCodeGenerator:
             if isinstance(node, ClassDecl):
                 cpp_code += f"class {node.name}" + (f" : public {node.superclass}" if node.superclass else "") + " {\npublic:\n"
                 for attr in node.attributes:
-                    init = self._translate_expression(attr.init_value) if attr.init_value else "0"
-                    cpp_code += f"    double {attr.name} = {init};\n"
+                    # RESOLVE O ERRO DE TIPAGEM NOS ATRIBUTOS DA CLASSE OOP
+                    if attr.init_value:
+                        init = self._translate_expression(attr.init_value)
+                        cpp_code += f"    decltype({init}) {attr.name} = {init};\n"
+                    else:
+                        cpp_code += f"    double {attr.name} = 0;\n"
                 for method in node.methods:
                     params = ", ".join(f"auto {p}" for p in method.params)
                     cpp_code += f"    auto {method.name}({params}) {{\n"
