@@ -18,15 +18,19 @@ class SemanticAnalyzer:
     def __init__(self) -> None:
         self._scopes: List[Dict[str, Symbol]] = []
         self._has_errors = False
+        self._current_function: Optional[str] = None
         self._enter_scope()
 
     def _enter_scope(self) -> None: self._scopes.append({})
     def _exit_scope(self) -> None:
         if len(self._scopes) > 1: self._scopes.pop()
 
+    def _get_context(self) -> str:
+        return f" (Funcao: {self._current_function})" if self._current_function else ""
+
     def _define_symbol(self, name: str, type_: str, line: int) -> None:
         if name in self._scopes[-1]:
-            print(f"[ERRO SEMANTICO] Linha {line}: Variavel '{name}' ja declarada.", file=sys.stderr)
+            print(f"[ERRO SEMANTICO] Linha {line}{self._get_context()}: Variavel '{name}' ja declarada.", file=sys.stderr)
             self._has_errors = True
         else: self._scopes[-1][name] = Symbol(name=name, type=type_)
 
@@ -43,7 +47,7 @@ class SemanticAnalyzer:
             self.validate_node(node.init_value)
         elif isinstance(node, Assignment):
             if self._lookup(node.name) is None:
-                print(f"[ERRO SEMANTICO] Linha {node.line}: Variavel '{node.name}' nao declarada.", file=sys.stderr)
+                print(f"[ERRO SEMANTICO] Linha {node.line}{self._get_context()}: Variavel '{node.name}' nao declarada.", file=sys.stderr)
                 self._has_errors = True
             self.validate_node(node.value)
         elif isinstance(node, PrintStmt):
@@ -70,7 +74,7 @@ class SemanticAnalyzer:
             self.validate_node(node.value)
         elif isinstance(node, IdentifierExpr):
             if self._lookup(node.name) is None:
-                print(f"[ERRO SEMANTICO] Linha {node.line}: Variavel '{node.name}' nao declarada.", file=sys.stderr)
+                print(f"[ERRO SEMANTICO] Linha {node.line}{self._get_context()}: Variavel '{node.name}' nao declarada.", file=sys.stderr)
                 self._has_errors = True
         elif isinstance(node, BinaryExpr):
             self.validate_node(node.left)
@@ -97,8 +101,11 @@ class SemanticAnalyzer:
         elif isinstance(node, FuncDecl):
             self._define_symbol(node.name, "FUNC", node.line)
             self._enter_scope()
+            old_function = self._current_function
+            self._current_function = node.name
             for p in node.params: self._define_symbol(p, "PARAM", node.line)
             self.validate_node(node.body)
+            self._current_function = old_function
             self._exit_scope()
         elif isinstance(node, ReturnStmt):
             if node.value: self.validate_node(node.value)
