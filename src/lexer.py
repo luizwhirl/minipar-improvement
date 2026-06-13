@@ -7,7 +7,6 @@ class TokenType(Enum):
     IDENTIFIER     = auto()
     NUMBER         = auto()
     STRING_LITERAL = auto()
-
     CLASS     = auto()
     EXTENDS   = auto()
     NEW       = auto()
@@ -24,8 +23,7 @@ class TokenType(Enum):
     SEND      = auto()
     RECEIVE   = auto()
     PRINT     = auto()
-    MATRIX    = auto() # Keyword para criar matriz
-
+    MATRIX    = auto()
     PLUS      = auto()
     MINUS     = auto()
     STAR      = auto()
@@ -41,12 +39,11 @@ class TokenType(Enum):
     RPAREN    = auto()
     LBRACE    = auto()
     RBRACE    = auto()
-    LBRACKET  = auto() # [
-    RBRACKET  = auto() # ]
+    LBRACKET  = auto()
+    RBRACKET  = auto()
     DOT       = auto()
     SEMICOLON = auto()
     COMMA     = auto()
-
     END_OF_FILE = auto()
     UNKNOWN     = auto()
 
@@ -126,6 +123,9 @@ class Lexer:
             elif ch.isdigit():
                 num = ""
                 while self._peek().isdigit(): num += self._advance()
+                if self._peek() == ".":
+                    num += self._advance()
+                    while self._peek().isdigit(): num += self._advance()
                 tokens.append(self._make_token(TokenType.NUMBER, num, start_line, start_col))
             elif ch == '"':
                 self._advance()

@@ -6,6 +6,8 @@ _CPP_HEADER = """\
 #include <memory>
 #include <cstring>
 #include <chrono>
+#include <cmath>
+#include <cstdlib>
 #include <type_traits>
 
 #ifdef _WIN32
@@ -20,6 +22,26 @@ _CPP_HEADER = """\
   #define CLOSE_SOCK close
 #endif
 
+// Helper para Math e Random nativos para as Redes Neurais
+double exp(double x) { return std::exp(x); }
+double random_val() { return (double)rand() / RAND_MAX; }
+
+// Helper para Input
+std::string input() {
+    std::string s;
+    std::getline(std::cin, s);
+    return s;
+}
+
+// Helper para Arrays (.pop) do Python
+template<typename T>
+auto __array_pop(std::vector<T>& v) {
+    if (v.empty()) return T{};
+    auto val = v.back();
+    v.pop_back();
+    return val;
+}
+
 // Helper para formatar e printar std::vector (arrays e matrizes) nativamente
 template <typename T>
 std::ostream& operator<<(std::ostream& os, const std::vector<T>& v) {
@@ -32,7 +54,6 @@ std::ostream& operator<<(std::ostream& os, const std::vector<T>& v) {
     return os;
 }
 
-// Helper para enviar números ou strings via Sockets
 template<typename T>
 std::string __to_string(const T& val) {
     if constexpr (std::is_constructible_v<std::string, T>) {
@@ -42,7 +63,6 @@ std::string __to_string(const T& val) {
     }
 }
 
-// Helper para criar matrizes 2D protegidas dinamicamente
 template<typename T>
 auto __make_matrix(int rows, int cols, T init_val) {
     using ActualT = std::conditional_t<std::is_same_v<std::decay_t<T>, const char*>, std::string, T>;

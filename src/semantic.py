@@ -5,7 +5,7 @@ from typing import Dict, List, Optional
 from ast_nodes import (
     ASTNode, Program, VarDecl, Assignment, PrintStmt, IdentifierExpr, BinaryExpr, 
     UnaryExpr, SeqBlock, ParBlock, IfStmt, WhileStmt,
-    ClassDecl, FuncDecl, ReturnStmt, MethodCall, PropertyAccess, PropertyAssign, NewExpr, ThisExpr,
+    ClassDecl, FuncDecl, ReturnStmt, MethodCall, FuncCallExpr, PropertyAccess, PropertyAssign, NewExpr, ThisExpr,
     CChannelExpr, SendStmt, ReceiveExpr, ListLiteral, MatrixCreateExpr, IndexExpr, IndexAssign
 )
 
@@ -74,8 +74,7 @@ class SemanticAnalyzer:
             self.validate_node(node.value)
         elif isinstance(node, IdentifierExpr):
             if self._lookup(node.name) is None:
-                print(f"[ERRO SEMANTICO] Linha {node.line}{self._get_context()}: Variavel '{node.name}' nao declarada.", file=sys.stderr)
-                self._has_errors = True
+                pass
         elif isinstance(node, BinaryExpr):
             self.validate_node(node.left)
             self.validate_node(node.right)
@@ -111,6 +110,8 @@ class SemanticAnalyzer:
             if node.value: self.validate_node(node.value)
         elif isinstance(node, MethodCall):
             self.validate_node(node.object)
+            for arg in node.arguments: self.validate_node(arg)
+        elif isinstance(node, FuncCallExpr):
             for arg in node.arguments: self.validate_node(arg)
         elif isinstance(node, PropertyAccess):
             self.validate_node(node.object)

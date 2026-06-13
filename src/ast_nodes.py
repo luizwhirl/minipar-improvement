@@ -102,6 +102,12 @@ class MethodCall(ASTNode):
     line: int = 1
 
 @dataclass
+class FuncCallExpr(ASTNode):
+    name: str
+    arguments: List[ASTNode]
+    line: int = 1
+
+@dataclass
 class PropertyAccess(ASTNode):
     object: ASTNode
     property_name: str

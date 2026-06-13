@@ -1,0 +1,25 @@
+# Programa de Teste 4: Rede Neural XOR
+func sigmoid(x) {
+    return 1 / (1 + exp(0 - x));
+}
+
+class NeuronioXOR {
+    var peso1 = 0.6;
+    var peso2 = 0.4;
+    var bias = 0.2;
+    var saida = 0;
+    
+    func feedforward(e1, e2) {
+        var soma = (e1 * this.peso1) + (e2 * this.peso2) + this.bias;
+        this.saida = sigmoid(soma);
+        return this.saida;
+    }
+}
+
+seq {
+    var n = new NeuronioXOR();
+    print("Testando XOR (0, 0) Predicted Output: ", n.feedforward(0, 0));
+    print("Testando XOR (0, 1) Predicted Output: ", n.feedforward(0, 1));
+    print("Testando XOR (1, 0) Predicted Output: ", n.feedforward(1, 0));
+    print("Testando XOR (1, 1) Predicted Output: ", n.feedforward(1, 1));
+}

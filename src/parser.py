@@ -5,7 +5,7 @@ from lexer import Token, TokenType
 from ast_nodes import (
     ASTNode, Program, VarDecl, Assignment, PrintStmt, SeqBlock, ParBlock, 
     BinaryExpr, UnaryExpr, NumberExpr, StringExpr, IdentifierExpr, IfStmt, WhileStmt,
-    ClassDecl, FuncDecl, ReturnStmt, MethodCall, PropertyAccess, PropertyAssign, NewExpr, ThisExpr,
+    ClassDecl, FuncDecl, ReturnStmt, MethodCall, FuncCallExpr, PropertyAccess, PropertyAssign, NewExpr, ThisExpr,
     CChannelExpr, SendStmt, ReceiveExpr, ListLiteral, MatrixCreateExpr, IndexExpr, IndexAssign
 )
 
@@ -145,7 +145,6 @@ class Parser:
         if self._match(TokenType.IF): return self._parse_if_stmt()
         if self._match(TokenType.WHILE): return self._parse_while_stmt()
 
-        # Intercepta as expressões que podem sofrer atribuição (Identificadores, Propriedades e Arrays)
         if self._peek().type in (TokenType.IDENTIFIER, TokenType.THIS, TokenType.NEW, TokenType.RECEIVE, TokenType.C_CHANNEL, TokenType.MATRIX, TokenType.LBRACKET):
             expr = self._parse_expression()
             if self._match(TokenType.ASSIGN):
@@ -155,7 +154,7 @@ class Parser:
                 elif isinstance(expr, PropertyAccess): return PropertyAssign(object=expr.object, property_name=expr.property_name, value=val, line=expr.line)
                 elif isinstance(expr, IndexExpr): return IndexAssign(target=expr, value=val, line=expr.line)
                 else: sys.exit(print(f"[ERRO] Linha {expr.line}: Atribuicao invalida", file=sys.stderr) or 1)
-            elif isinstance(expr, MethodCall):
+            elif isinstance(expr, (MethodCall, FuncCallExpr)):
                 self._consume(TokenType.SEMICOLON, "Esperado ';'")
                 return expr
             sys.exit(print(f"[ERRO] Linha {expr.line}: Instrucao ou expressao isolada invalida", file=sys.stderr) or 1)
@@ -254,14 +253,22 @@ class Parser:
         elif self._match(TokenType.STRING_LITERAL):
             node = StringExpr(value=tok.lexeme, line=tok.line)
         elif self._match(TokenType.IDENTIFIER):
-            node = IdentifierExpr(name=tok.lexeme, line=tok.line)
+            name = tok.lexeme
+            if self._match(TokenType.LPAREN):
+                args = []
+                if self._peek().type != TokenType.RPAREN:
+                    args.append(self._parse_expression())
+                    while self._match(TokenType.COMMA): args.append(self._parse_expression())
+                self._consume(TokenType.RPAREN, "Esperado ')'")
+                node = FuncCallExpr(name=name, arguments=args, line=tok.line)
+            else:
+                node = IdentifierExpr(name=name, line=tok.line)
         elif self._match(TokenType.LPAREN):
             node = self._parse_expression()
             self._consume(TokenType.RPAREN, "Esperado ')'")
         else:
             sys.exit(print(f"[ERRO SINTATICO] Linha {tok.line}: Expressao esperada", file=sys.stderr) or 1)
 
-        # Loop de encadeamento (Ponto, Indexação, Chamadas)
         while True:
             if self._match(TokenType.DOT):
                 prop_tok = self._consume(TokenType.IDENTIFIER, "Esperado identificador apos '.'")

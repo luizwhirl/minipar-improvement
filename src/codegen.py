@@ -6,7 +6,7 @@ from typing import Optional
 from ast_nodes import (
     ASTNode, Program, VarDecl, Assignment, PrintStmt, SeqBlock, ParBlock, BinaryExpr, 
     UnaryExpr, NumberExpr, StringExpr, IdentifierExpr, IfStmt, WhileStmt,
-    ClassDecl, FuncDecl, ReturnStmt, MethodCall, PropertyAccess, PropertyAssign, NewExpr, ThisExpr,
+    ClassDecl, FuncDecl, ReturnStmt, MethodCall, FuncCallExpr, PropertyAccess, PropertyAssign, NewExpr, ThisExpr,
     CChannelExpr, SendStmt, ReceiveExpr, ListLiteral, MatrixCreateExpr, IndexExpr, IndexAssign
 )
 from cpp_template import _CPP_HEADER
@@ -37,11 +37,21 @@ class CppCodeGenerator:
             return f"std::make_shared<{node.class_name}>({args})"
         if isinstance(node, ThisExpr): return "this"
         if isinstance(node, PropertyAccess):
+            if node.property_name == "size": return f"{self._translate_expression(node.object)}.size()"
             return f"{self._translate_expression(node.object)}->{node.property_name}"
+        
         if isinstance(node, MethodCall):
             args = ", ".join(self._translate_expression(a) for a in node.arguments)
-            return f"{self._translate_expression(node.object)}->{node.method_name}({args})"
+            m_name = node.method_name
+            if m_name in ("append", "push_back"): return f"{self._translate_expression(node.object)}.push_back({args})"
+            if m_name == "pop": return f"__array_pop({self._translate_expression(node.object)})"
+            if m_name == "size": return f"{self._translate_expression(node.object)}.size()"
+            return f"{self._translate_expression(node.object)}->{m_name}({args})"
         
+        if isinstance(node, FuncCallExpr):
+            args = ", ".join(self._translate_expression(a) for a in node.arguments)
+            return f"{node.name}({args})"
+
         if isinstance(node, CChannelExpr):
             ip = self._translate_expression(node.ip)
             port = self._translate_expression(node.port)
@@ -49,10 +59,9 @@ class CppCodeGenerator:
         if isinstance(node, ReceiveExpr):
             return f"{self._translate_expression(node.channel)}->receiveData()"
 
-        # Array e Matrizes
         if isinstance(node, ListLiteral):
             elems = ", ".join(self._translate_expression(e) for e in node.elements)
-            return f"std::vector{{{elems}}}"
+            return f"std::vector<double>{{{elems}}}"
         if isinstance(node, MatrixCreateExpr):
             r = self._translate_expression(node.rows)
             c = self._translate_expression(node.cols)
@@ -79,7 +88,7 @@ class CppCodeGenerator:
             tgt = self._translate_expression(node.target)
             return f"{indent}{tgt} = {self._translate_expression(node.value)};\n"
         
-        if isinstance(node, MethodCall):
+        if isinstance(node, (MethodCall, FuncCallExpr)):
             return f"{indent}{self._translate_expression(node)};\n"
         if isinstance(node, ReturnStmt):
             val = self._translate_expression(node.value) if node.value else ""
@@ -92,8 +101,8 @@ class CppCodeGenerator:
 
         if isinstance(node, PrintStmt):
             parts = [f" << {self._translate_expression(a)}" for a in node.arguments]
-            sep = ' << " "'
-            return f"{indent}std::cout{sep.join(parts)} << std::endl;\n"
+            return f"{indent}std::cout{ ''.join(parts) } << std::endl;\n"
+        
         if isinstance(node, SeqBlock):
             lines = [f"{indent}{{\n"]
             for stmt in node.statements: lines.append(self._translate_statement(stmt, indent + "    "))
@@ -138,10 +147,17 @@ class CppCodeGenerator:
                     else: cpp_code += self._translate_statement(method.body, "        ")
                     cpp_code += "    }\n"
                 cpp_code += "};\n\n"
+            elif isinstance(node, FuncDecl):
+                params = ", ".join(f"auto {p}" for p in node.params)
+                cpp_code += f"auto {node.name}({params}) {{\n"
+                if isinstance(node.body, SeqBlock):
+                    for stmt in node.body.statements: cpp_code += self._translate_statement(stmt, "    ")
+                else: cpp_code += self._translate_statement(node.body, "    ")
+                cpp_code += "}\n\n"
 
         cpp_code += "int main() {\n    #ifdef _WIN32\n        WSADATA wsa;\n        WSAStartup(MAKEWORD(2,2), &wsa);\n    #endif\n\n"
         for node in program.statements:
-            if not isinstance(node, ClassDecl):
+            if not isinstance(node, (ClassDecl, FuncDecl)):
                 if isinstance(node, SeqBlock):
                     for stmt in node.statements: cpp_code += self._translate_statement(stmt, "    ")
                 else: cpp_code += self._translate_statement(node, "    ")
