@@ -65,5 +65,10 @@ def main() -> int:
         return 0
     return 1
 
+import sys
+
 if __name__ == "__main__":
-    sys.exit(main())
+    if len(sys.argv) > 1:
+        arquivo_alvo = sys.argv[1]
+    else:
+        menu()
