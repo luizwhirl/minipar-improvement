@@ -42,28 +42,65 @@ def compile_file(source_path: str, output_name: str) -> bool:
     codegen = CppCodeGenerator()
     return codegen.generate(program, output_name)
 
-def main() -> int:
-    # Se rodar sem argumentos (ex: `python main.py`), inicia o menu interativo
-    if len(sys.argv) < 2:
+
+def start_interactive():
+    """Inicia a tela de seleção inicial do sistema."""
+    print("\n" + "=" * 45)
+    print("      MINIPAR COMPILER & IDE")
+    print("=" * 45)
+    print("\nComo você deseja rodar o sistema?\n")
+    print("[1] - Modo Terminal (Menu Interativo)")
+    print("[2] - Modo Web Interface (IDE no Navegador)\n")
+    
+    escolha = input("Digite a sua escolha (1 ou 2): ").strip()
+    
+    if escolha == '1':
+        print("\nIniciando modo Terminal...\n")
         try:
             import menu
             menu.exibir_menu()
-            return 0
-        except ImportError:
-            print("Uso: python main.py <arquivo_fonte.minipar> [nome_saida]")
-            return 1
+        except ImportError as e:
+            print(f"[ERRO] Falha ao carregar o menu: {e}")
+            
+    elif escolha == '2':
+        print("\nIniciando Web Interface IDE...")
+        print("Servidor inicializado! Acesse no navegador: http://127.0.0.1:5000\n")
+        try:
+            from app import app
+            # Executa o Flask. Deixamos debug=False para o terminal ficar mais limpo
+            app.run(host="127.0.0.1", port=5000, debug=False)
+        except ImportError as e:
+            print(f"[ERRO] Falha ao carregar a interface web: {e}")
+        except Exception as e:
+            print(f"[ERRO] Erro ao iniciar o servidor Flask: {e}")
+    else:
+        print("\n[ERRO] Escolha inválida. Finalizando o sistema.")
 
-    # Caso passe os parametros diretamente via CLI
+
+def main() -> int:
+    # Se rodar sem argumentos (ex: `python main.py`), inicia a interface de escolha
+    if len(sys.argv) < 2:
+        start_interactive()
+        return 0
+
+    # Caso o script seja chamado via subprocesso pela IDE (passando arquivo como argumento)
     source_path  = sys.argv[1]
-    output_name  = sys.argv[2] if len(sys.argv) > 2 else "programa_compilado"
+    
+    # Se não passarem o nome da saída manualmente, extraímos do nome do próprio arquivo Minipar
+    if len(sys.argv) > 2:
+        output_name = sys.argv[2]
+    else:
+        base_file = os.path.basename(source_path)
+        output_name = base_file.replace('.minipar', '')
 
-    print("=== Compilador MiniPar 2026.1 (Python Version) ===")
+    print("=== Compilador MiniPar ===")
     success = compile_file(source_path, output_name)
     
     if success:
         print("=== Processo Finalizado ===")
         return 0
     return 1
+
 
 if __name__ == "__main__":
     sys.exit(main())
