@@ -1,0 +1,48 @@
+class Quicksort {
+    var array = [10, -3, -40, 80, 70, -100];
+
+    func trocar(i, j) {
+        var temp = this.array[i];
+        this.array[i] = this.array[j];
+        this.array[j] = temp;
+    }
+
+    func particionar(inicio, fim) {
+        var pivot = this.array[fim];
+        var i = inicio - 1;
+        var j = inicio;
+        while (j < fim) {
+            if (this.array[j] <= pivot) {
+                i = i + 1;
+                this.trocar(i, j);
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+        this.trocar(i, fim);
+        return i;
+    }
+
+    func quicksort(inicio, fim) {
+        if (inicio < fim) {
+            var p = this.particionar(inicio, fim);
+            this.quicksort(inicio, p - 1);
+            this.quicksort(p + 1, fim);
+        }
+    }
+
+    func ordenar() {
+        this.quicksort(0, 5);
+        return this.array;
+    }
+}
+
+seq {
+    print("==== Ordenação com Quicksort ====");
+    print("Insira os elementos do vetor separados por espaço:");
+    print("10 -3 -40 80 70 -100");
+    var algoritmo = new Quicksort();
+    print("Vetor original: [10, -3, -40, 80, 70, -100]");
+    var vetor_ordenado = algoritmo.ordenar();
+    print("Vetor ordenado:", vetor_ordenado);
+}
