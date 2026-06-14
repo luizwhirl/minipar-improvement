@@ -16,37 +16,24 @@ class Neuronio {
     }
 
     func treinar() {
-        print("Entrada: 1 | Saída desejada: 0");
+        print("Entrada:", this.input_val, "| Saida desejada:", this.output_desejado);
         while (this.erro != 0) {
             this.iteracao = this.iteracao + 1;
             var soma = (this.input_val * this.peso) + (this.bias * this.peso_bias);
             var saida = this.ativacao(soma);
             this.erro = this.output_desejado - saida;
-            if (this.iteracao == 1) {
-                print("#### Iteração: 1");
-                print("Peso: 0.5000");
-                print("Saída: 1");
-                print("Erro: -1");
-                print("Peso do bias: 0.5000");
-            }
-            if (this.iteracao == 50) {
-                print("#### Iteração: 50");
-                print("Peso: 0.0100");
-                print("Saída: 1");
-                print("Erro: -1");
-                print("Peso do bias: 0.0100");
-            }
+            print("#### Iteracao:", this.iteracao);
+            print("Peso:", this.peso);
+            print("Saida:", saida);
+            print("Erro:", this.erro);
             if (this.erro != 0) {
                 this.peso = this.peso + (this.taxa_aprendizado * this.input_val * this.erro);
                 this.peso_bias = this.peso_bias + (this.taxa_aprendizado * this.bias * this.erro);
+                print("Peso do bias:", this.peso_bias);
             }
         }
-        print("#### Iteração: 51");
-        print("Peso: -0.0000");
-        print("Saída: 0");
-        print("Erro: 0");
-        print("✅ Parabéns! O neurônio aprendeu.");
-        print("Valor desejado: 0");
+        print("Parabens! O neuronio aprendeu.");
+        print("Valor desejado:", this.output_desejado);
     }
 }
 

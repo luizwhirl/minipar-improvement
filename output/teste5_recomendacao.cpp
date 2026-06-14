@@ -7,7 +7,9 @@
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
+#include <variant>
 #include <type_traits>
+#include <functional>
 
 #ifdef _WIN32
   #include <winsock2.h>
@@ -21,54 +23,207 @@
   #define CLOSE_SOCK close
 #endif
 
-// Helper para Random nativo
-double random_val() { return (double)rand() / RAND_MAX; }
+// =====================================================================
+// MiniParAny: tipo universal que suporta double, string, vector e matrix
+// Permite passar matrizes e arrays como parametros e retorno de funcoes
+// =====================================================================
+struct MiniParAny;
+using MiniParVec = std::vector<MiniParAny>;
+using MiniParMat = std::vector<std::vector<MiniParAny>>;
 
-// Helper para Input
-std::string input() {
-    std::string s;
-    std::getline(std::cin, s);
-    return s;
+struct MiniParAny {
+    enum class Kind { NUM, STR, VEC, MAT, BOOL } kind = Kind::NUM;
+    double num_val = 0.0;
+    std::string str_val;
+    MiniParVec vec_val;
+    MiniParMat mat_val;
+
+    // Construtores implicitos para conversao automatica
+    MiniParAny() : kind(Kind::NUM), num_val(0.0) {}
+    MiniParAny(double v) : kind(Kind::NUM), num_val(v) {}
+    MiniParAny(int v) : kind(Kind::NUM), num_val((double)v) {}
+    MiniParAny(bool v) : kind(Kind::BOOL), num_val(v ? 1.0 : 0.0) {}
+    MiniParAny(const char* v) : kind(Kind::STR), str_val(v) {}
+    MiniParAny(const std::string& v) : kind(Kind::STR), str_val(v) {}
+    MiniParAny(const MiniParVec& v) : kind(Kind::VEC), vec_val(v) {}
+    MiniParAny(const MiniParMat& v) : kind(Kind::MAT), mat_val(v) {}
+
+    // Conversoes implicitas de saida
+    operator double() const { 
+        if (kind == Kind::STR) { try { return std::stod(str_val); } catch(...) { return 0.0; } }
+        return num_val; 
+    }
+    operator bool() const { return num_val != 0.0 || kind == Kind::BOOL; }
+    operator std::string() const { 
+        if (kind == Kind::STR) return str_val;
+        if (kind == Kind::NUM) {
+            if (num_val == (long long)num_val) return std::to_string((long long)num_val);
+            return std::to_string(num_val);
+        }
+        return "";
+    }
+
+    // Acesso por indice (arrays e matrizes)
+    MiniParAny& operator[](int idx) {
+        if (kind == Kind::VEC) return vec_val[idx];
+        if (kind == Kind::MAT) { static MiniParAny dummy; return dummy; }
+        return *this;
+    }
+    const MiniParAny& operator[](int idx) const {
+        if (kind == Kind::VEC) return vec_val[idx];
+        return *this;
+    }
+    // Acesso a linha de matriz (retorna o vetor da linha)
+    MiniParVec& mat_row(int idx) { return mat_val[idx]; }
+
+    // size() para arrays e matrizes
+    std::size_t size() const {
+        if (kind == Kind::VEC) return vec_val.size();
+        if (kind == Kind::MAT) return mat_val.size();
+        return 0;
+    }
+
+    // Operadores aritmeticos
+    MiniParAny operator+(const MiniParAny& o) const {
+        if (kind == Kind::STR || o.kind == Kind::STR) return MiniParAny(std::string(*this) + std::string(o));
+        return MiniParAny(num_val + o.num_val);
+    }
+    MiniParAny operator-(const MiniParAny& o) const { return MiniParAny(num_val - o.num_val); }
+    MiniParAny operator*(const MiniParAny& o) const { return MiniParAny(num_val * o.num_val); }
+    MiniParAny operator/(const MiniParAny& o) const { return o.num_val != 0.0 ? MiniParAny(num_val / o.num_val) : MiniParAny(0.0); }
+    MiniParAny operator%(const MiniParAny& o) const { return MiniParAny(fmod(num_val, o.num_val)); }
+    MiniParAny operator-() const { return MiniParAny(-num_val); }
+    MiniParAny operator!() const { return MiniParAny(num_val == 0.0 ? 1.0 : 0.0); }
+
+    // Operadores de comparacao
+    bool operator==(const MiniParAny& o) const {
+        if (kind == Kind::STR && o.kind == Kind::STR) return str_val == o.str_val;
+        return num_val == o.num_val;
+    }
+    bool operator!=(const MiniParAny& o) const { return !(*this == o); }
+    bool operator<(const MiniParAny& o) const { return num_val < o.num_val; }
+    bool operator<=(const MiniParAny& o) const { return num_val <= o.num_val; }
+    bool operator>(const MiniParAny& o) const { return num_val > o.num_val; }
+    bool operator>=(const MiniParAny& o) const { return num_val >= o.num_val; }
+    bool operator&&(const MiniParAny& o) const { return (bool)*this && (bool)o; }
+    bool operator||(const MiniParAny& o) const { return (bool)*this || (bool)o; }
+};
+
+// Impressao de MiniParAny no cout
+inline std::ostream& operator<<(std::ostream& os, const MiniParAny& v) {
+    if (v.kind == MiniParAny::Kind::STR) { os << v.str_val; return os; }
+    if (v.kind == MiniParAny::Kind::VEC) {
+        os << "[";
+        for (std::size_t i = 0; i < v.vec_val.size(); ++i) {
+            os << v.vec_val[i];
+            if (i != v.vec_val.size() - 1) os << ", ";
+        }
+        os << "]";
+        return os;
+    }
+    if (v.kind == MiniParAny::Kind::MAT) {
+        os << "[";
+        for (std::size_t i = 0; i < v.mat_val.size(); ++i) {
+            os << "[";
+            for (std::size_t j = 0; j < v.mat_val[i].size(); ++j) {
+                os << v.mat_val[i][j];
+                if (j != v.mat_val[i].size() - 1) os << ", ";
+            }
+            os << "]";
+            if (i != v.mat_val.size() - 1) os << ", ";
+        }
+        os << "]";
+        return os;
+    }
+    // NUM ou BOOL
+    double val = v.num_val;
+    if (val == (long long)val) os << (long long)val;
+    else os << val;
+    return os;
 }
 
-std::string input(const std::string& prompt) {
-    std::cout << prompt;
-    return input();
-}
-
-std::vector<int> __minipar_range(int end) {
-    std::vector<int> values;
-    for (int i = 0; i < end; ++i) values.push_back(i);
-    return values;
-}
-
-std::vector<int> __minipar_range(int start, int end) {
-    std::vector<int> values;
-    for (int i = start; i < end; ++i) values.push_back(i);
-    return values;
-}
-
-// Helper para Arrays (.pop) do Python
-template<typename T>
-auto __array_pop(std::vector<T>& v) {
-    if (v.empty()) return T{};
-    auto val = v.back();
-    v.pop_back();
-    return val;
-}
-
-// Helper para formatar e printar std::vector (arrays e matrizes) nativamente
-template <typename T>
-std::ostream& operator<<(std::ostream& os, const std::vector<T>& v) {
+// Impressao de vector<MiniParAny> linha de matriz
+inline std::ostream& operator<<(std::ostream& os, const MiniParVec& row) {
     os << "[";
-    for (size_t i = 0; i < v.size(); ++i) {
-        os << v[i];
-        if (i != v.size() - 1) os << ", ";
+    for (std::size_t i = 0; i < row.size(); ++i) {
+        os << row[i];
+        if (i != row.size() - 1) os << ", ";
     }
     os << "]";
     return os;
 }
 
+// =====================================================================
+// Helpers globais
+// =====================================================================
+
+// Random
+double random_val() { return (double)rand() / RAND_MAX; }
+
+// Input do teclado
+std::string input() {
+    std::string s;
+    std::getline(std::cin, s);
+    return s;
+}
+std::string input(const std::string& prompt) {
+    std::cout << prompt;
+    return input();
+}
+MiniParAny input(const MiniParAny& prompt) {
+    std::cout << prompt;
+    std::string s;
+    std::getline(std::cin, s);
+    return MiniParAny(s);
+}
+
+// Range
+MiniParAny __minipar_range(double end_val) {
+    MiniParVec values;
+    for (int i = 0; i < (int)end_val; ++i) values.push_back(MiniParAny((double)i));
+    return MiniParAny(values);
+}
+MiniParAny __minipar_range(double start_val, double end_val) {
+    MiniParVec values;
+    for (int i = (int)start_val; i < (int)end_val; ++i) values.push_back(MiniParAny((double)i));
+    return MiniParAny(values);
+}
+
+// Pop de array
+MiniParAny __array_pop(MiniParAny& v) {
+    if (v.kind == MiniParAny::Kind::VEC && !v.vec_val.empty()) {
+        auto val = v.vec_val.back();
+        v.vec_val.pop_back();
+        return val;
+    }
+    return MiniParAny(0.0);
+}
+
+// Criacao de matriz com valor inicial
+MiniParAny __make_matrix(double rows, double cols, const MiniParAny& init_val) {
+    MiniParMat m((int)rows, std::vector<MiniParAny>((int)cols, init_val));
+    return MiniParAny(m);
+}
+
+// Acesso a elemento de matriz (obj[i][j])
+// Com MiniParAny, obj[i] retorna a linha (MiniParVec), e [j] acessa o elemento
+// Para IndexExpr aninhado: obj[i][j] -> mat_val[i][j]
+// O codegen gera: obj[i][j] como obj.mat_val[i][j] via operator[] encadeado
+// Mas como operator[] retorna MiniParAny& apenas para VEC,
+// precisamos de um helper para acesso a matriz:
+inline MiniParAny& __mat_at(MiniParAny& m, int i, int j) {
+    return m.mat_val[i][j];
+}
+inline const MiniParAny& __mat_at(const MiniParAny& m, int i, int j) {
+    return m.mat_val[i][j];
+}
+
+// exp() para MiniParAny
+inline MiniParAny std_exp(const MiniParAny& v) {
+    return MiniParAny(std::exp(v.num_val));
+}
+
+// to_string para envio por socket
 template<typename T>
 std::string __to_string(const T& val) {
     if constexpr (std::is_constructible_v<std::string, T>) {
@@ -77,19 +232,22 @@ std::string __to_string(const T& val) {
         return std::to_string(val);
     }
 }
-
-template<typename T>
-auto __make_matrix(int rows, int cols, T init_val) {
-    using ActualT = std::conditional_t<std::is_same_v<std::decay_t<T>, const char*>, std::string, T>;
-    return std::vector<std::vector<ActualT>>(rows, std::vector<ActualT>(cols, init_val));
+inline std::string __to_string(const MiniParAny& val) {
+    if (val.kind == MiniParAny::Kind::STR) return val.str_val;
+    return std::to_string(val.num_val);
 }
 
+// =====================================================================
+// Canal de Comunicacao MiniPar (TCP Sockets)
+// =====================================================================
 class MiniParChannel {
 public:
     std::string ip;
     int port;
 
     MiniParChannel(std::string ip, int port) : ip(ip), port(port) {}
+    MiniParChannel(const MiniParAny& ip_any, const MiniParAny& port_any)
+        : ip(ip_any.str_val), port((int)port_any.num_val) {}
 
     void sendData(std::string msg) {
         int sock = socket(AF_INET, SOCK_STREAM, 0);
@@ -98,7 +256,6 @@ public:
         serv_addr.sin_family = AF_INET;
         serv_addr.sin_port = htons(port);
         inet_pton(AF_INET, ip.c_str(), &serv_addr.sin_addr);
-        
         for(int i=0; i<50; i++) {
             if (connect(sock, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) >= 0) {
                 send(sock, msg.c_str(), msg.length(), 0);
@@ -114,25 +271,84 @@ public:
         if (server_fd < 0) return "";
         int opt = 1;
         setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, (const char*)&opt, sizeof(opt));
-        
         struct sockaddr_in address;
         address.sin_family = AF_INET;
         address.sin_addr.s_addr = INADDR_ANY;
         address.sin_port = htons(port);
-        
         if (bind(server_fd, (struct sockaddr*)&address, sizeof(address)) < 0) { CLOSE_SOCK(server_fd); return ""; }
         if (listen(server_fd, 3) < 0) { CLOSE_SOCK(server_fd); return ""; }
-        
         int new_socket = accept(server_fd, nullptr, nullptr);
         if (new_socket < 0) { CLOSE_SOCK(server_fd); return ""; }
-        
         char buffer[4096] = {0};
         recv(new_socket, buffer, 4096, 0);
         std::string result(buffer);
-        
         CLOSE_SOCK(new_socket);
         CLOSE_SOCK(server_fd);
         return result;
+    }
+};
+
+MiniParAny relu(MiniParAny x) {
+    if ((x > 0))
+    {
+        return x;
+    }
+    return 0;
+}
+
+MiniParAny sigmoid(MiniParAny x) {
+    return (1 / (1 + std_exp((0 - x))));
+}
+
+class Produto {
+public:
+    decltype("") nome = "";
+    void definir(MiniParAny n) {
+        this->nome = n;
+    }
+};
+
+class RedeNeural {
+public:
+    decltype(0) tam = 0;
+    decltype(0.5) peso = 0.5;
+    decltype(0.5) bias_oculto = 0.5;
+    decltype(0.5) bias_saida = 0.5;
+    decltype(10) neuronios_ocultos = 10;
+    void definir_tam(MiniParAny t) {
+        this->tam = t;
+    }
+    MiniParAny oculto(MiniParAny historico, MiniParAny i) {
+        auto soma = 0;
+        auto j = 0;
+        while ((j < this->tam))
+        {
+            soma = (soma + (historico[(int)j] * this->peso));
+            j = (j + 1);
+        }
+        soma = (soma + this->bias_oculto);
+        return relu(soma);
+    }
+    MiniParAny saida(MiniParAny ativ_oculta, MiniParAny i) {
+        auto soma = ((ativ_oculta * this->peso) + this->bias_saida);
+        return sigmoid(soma);
+    }
+    MiniParAny forward(MiniParAny historico, MiniParAny resultado) {
+        auto ativ = 0;
+        auto h = 0;
+        while ((h < this->neuronios_ocultos))
+        {
+            ativ = (ativ + this->oculto(historico, h));
+            h = (h + 1);
+        }
+        auto media_oculta = (ativ / this->neuronios_ocultos);
+        auto i = 0;
+        while ((i < this->tam))
+        {
+            resultado[(int)i] = this->saida(media_oculta, i);
+            i = (i + 1);
+        }
+        return resultado;
     }
 };
 
@@ -142,19 +358,58 @@ int main() {
         WSAStartup(MAKEWORD(2,2), &wsa);
     #endif
 
-    std::cout << "Produtos recomendados para você:" << std::endl;
-    std::cout << "Laptop" << std::endl;
-    std::cout << "Tablet" << std::endl;
-    std::cout << "Fones de ouvido" << std::endl;
-    std::cout << "Camisa" << std::endl;
-    std::cout << "Jaqueta" << std::endl;
-    std::cout << "Sapatos" << std::endl;
-    std::cout << "Geladeira" << std::endl;
-    std::cout << "Máquina de lavar" << std::endl;
-    std::cout << "Ar condicionado" << std::endl;
-    std::cout << "Não-ficção" << std::endl;
-    std::cout << "Ficção científica" << std::endl;
-    std::cout << "Fantasia" << std::endl;
+    auto p0 = std::make_shared<Produto>();
+    p0->definir("Smartphone");
+    auto p1 = std::make_shared<Produto>();
+    p1->definir("Laptop");
+    auto p2 = std::make_shared<Produto>();
+    p2->definir("Tablet");
+    auto p3 = std::make_shared<Produto>();
+    p3->definir("Fones de ouvido");
+    auto p4 = std::make_shared<Produto>();
+    p4->definir("Camisa");
+    auto p5 = std::make_shared<Produto>();
+    p5->definir("Jeans");
+    auto p6 = std::make_shared<Produto>();
+    p6->definir("Jaqueta");
+    auto p7 = std::make_shared<Produto>();
+    p7->definir("Sapatos");
+    auto p8 = std::make_shared<Produto>();
+    p8->definir("Geladeira");
+    auto p9 = std::make_shared<Produto>();
+    p9->definir("Micro-ondas");
+    auto p10 = std::make_shared<Produto>();
+    p10->definir("Maquina de lavar");
+    auto p11 = std::make_shared<Produto>();
+    p11->definir("Ar condicionado");
+    auto p12 = std::make_shared<Produto>();
+    p12->definir("Ficcao");
+    auto p13 = std::make_shared<Produto>();
+    p13->definir("Nao-ficcao");
+    auto p14 = std::make_shared<Produto>();
+    p14->definir("Ficcao cientifica");
+    auto p15 = std::make_shared<Produto>();
+    p15->definir("Fantasia");
+    auto nomes = std::vector<double>{"Smartphone", "Laptop", "Tablet", "Fones de ouvido", "Camisa", "Jeans", "Jaqueta", "Sapatos", "Geladeira", "Micro-ondas", "Maquina de lavar", "Ar condicionado", "Ficcao", "Nao-ficcao", "Ficcao cientifica", "Fantasia"};
+    auto historico = std::vector<double>{1, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0};
+    auto tam = 16;
+    auto rede = std::make_shared<RedeNeural>();
+    rede->definir_tam(tam);
+    auto resultado = std::vector<double>{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    resultado = rede->forward(historico, resultado);
+    std::cout << "Produtos recomendados para voce:" << std::endl;
+    auto i = 0;
+    while ((i < tam))
+    {
+        if ((historico[(int)i] == 0))
+        {
+            if ((resultado[(int)i] > 0.5))
+            {
+                std::cout << nomes[(int)i] << std::endl;
+            }
+        }
+        i = (i + 1);
+    }
 
     return 0;
 }

@@ -1,10 +1,127 @@
+# Rede Neural para aprender a funcao XOR
+# Camada oculta com 3 neuronios, 1 neuronio de saida
+# Usando feedforward e backpropagation manuais
+
 func sigmoid(x) {
     return 1 / (1 + exp(0 - x));
 }
 
+func sigmoid_deriv(x) {
+    return x * (1 - x);
+}
+
+class Neuronio {
+    var p0 = 0;
+    var p1 = 0;
+    var bias_val = 0;
+    var saida = 0;
+
+    func init(w0, w1, b) {
+        this.p0 = w0;
+        this.p1 = w1;
+        this.bias_val = b;
+        this.saida = 0;
+    }
+
+    func feedforward2(e0, e1) {
+        var soma = (e0 * this.p0) + (e1 * this.p1) + this.bias_val;
+        this.saida = sigmoid(soma);
+        return this.saida;
+    }
+
+    func feedforward3(e0, e1, e2) {
+        var soma = (e0 * this.p0) + (e1 * this.p1) + (e2 * this.bias_val);
+        this.saida = sigmoid(soma);
+        return this.saida;
+    }
+}
+
+class RedeNeural {
+    var taxa = 0.2;
+    var n0 = 0;
+    var n1 = 0;
+    var n2 = 0;
+    var ns = 0;
+
+    func inicializar() {
+        this.n0 = new Neuronio();
+        this.n1 = new Neuronio();
+        this.n2 = new Neuronio();
+        this.ns = new Neuronio();
+        this.n0.init(0.5, 0.5, 0.5);
+        this.n1.init(0.5, 0.5, 0.5);
+        this.n2.init(0.5, 0.5, 0.5);
+        this.ns.init(0.5, 0.5, 0.5);
+    }
+
+    func forward(e0, e1) {
+        var o0 = this.n0.feedforward2(e0, e1);
+        var o1 = this.n1.feedforward2(e0, e1);
+        var o2 = this.n2.feedforward2(e0, e1);
+        var out = this.ns.feedforward3(o0, o1, o2);
+        return out;
+    }
+
+    func treinar_amostra(e0, e1, alvo) {
+        var o0 = this.n0.feedforward2(e0, e1);
+        var o1 = this.n1.feedforward2(e0, e1);
+        var o2 = this.n2.feedforward2(e0, e1);
+        var out = this.ns.feedforward3(o0, o1, o2);
+
+        var erro = alvo - out;
+        var delta_s = erro * sigmoid_deriv(out);
+
+        this.ns.p0 = this.ns.p0 + (o0 * delta_s * this.taxa);
+        this.ns.p1 = this.ns.p1 + (o1 * delta_s * this.taxa);
+        this.ns.bias_val = this.ns.bias_val + (delta_s * this.taxa);
+
+        var d0 = delta_s * this.ns.p0 * sigmoid_deriv(o0);
+        var d1 = delta_s * this.ns.p1 * sigmoid_deriv(o1);
+        var d2 = delta_s * this.ns.bias_val * sigmoid_deriv(o2);
+
+        this.n0.p0 = this.n0.p0 + (e0 * d0 * this.taxa);
+        this.n0.p1 = this.n0.p1 + (e1 * d0 * this.taxa);
+        this.n0.bias_val = this.n0.bias_val + (d0 * this.taxa);
+
+        this.n1.p0 = this.n1.p0 + (e0 * d1 * this.taxa);
+        this.n1.p1 = this.n1.p1 + (e1 * d1 * this.taxa);
+        this.n1.bias_val = this.n1.bias_val + (d1 * this.taxa);
+
+        this.n2.p0 = this.n2.p0 + (e0 * d2 * this.taxa);
+        this.n2.p1 = this.n2.p1 + (e1 * d2 * this.taxa);
+        this.n2.bias_val = this.n2.bias_val + (d2 * this.taxa);
+    }
+
+    func treinar_epocas(epocas) {
+        var ep = 0;
+        while (ep < epocas) {
+            this.treinar_amostra(0, 0, 0);
+            this.treinar_amostra(0, 1, 1);
+            this.treinar_amostra(1, 0, 1);
+            this.treinar_amostra(1, 1, 0);
+            ep = ep + 1;
+        }
+    }
+}
+
 seq {
-    print("Input: [0, 0], Predicted Output: 0.0089");
-    print("Input: [0, 1], Predicted Output: 0.9769");
-    print("Input: [1, 0], Predicted Output: 0.9758");
-    print("Input: [1, 1], Predicted Output: 0.0291");
+    print("=== Rede Neural XOR - MiniPar 2026.1 ===");
+    print("--- Treinando Rede Neural XOR ---");
+    print("Epocas: 20000");
+
+    var rede = new RedeNeural();
+    rede.inicializar();
+    rede.treinar_epocas(20000);
+
+    print("Treinamento concluido");
+    print("--- Testando Rede Neural ---");
+
+    var r00 = rede.forward(0, 0);
+    print("Input: [0, 0], Predicted Output:", r00);
+    var r01 = rede.forward(0, 1);
+    print("Input: [0, 1], Predicted Output:", r01);
+    var r10 = rede.forward(1, 0);
+    print("Input: [1, 0], Predicted Output:", r10);
+    var r11 = rede.forward(1, 1);
+    print("Input: [1, 1], Predicted Output:", r11);
 }
