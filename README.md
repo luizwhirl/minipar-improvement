@@ -1,58 +1,115 @@
 # Compilador MiniPar
+trabalho de Compiladores - UFAL 
 
-arquitetura orientada a objetos da versão C++ original e gerando o mesmo
-código C++ de saída.
 
-## Estrutura do projeto
+Arquitetura orientada a objetos baseada na versão C++ original, agora expandida para incluir **Geração de Código Intermediário (TAC)** de 3 endereços e uma nova **IDE Web**, capaz de gerar, compilar e executar o código C++ produzido pelo compilador.
 
-```bash
+---
+
+## Estrutura do Projeto
+
+```text
 minipar_python/
 ├── src/
-│   ├── ast_nodes.py   # Nós da AST (dataclasses)
-│   ├── lexer.py       # Analisador Léxico
-│   ├── parser.py      # Analisador Sintático
-│   ├── semantic.py    # Analisador Semântico
-│   ├── codegen.py     # Gerador de Código C++
-│   └── cpp_template.py# Template base em C++
-├── examples/          # Pasta para exemplos de código
-│   └── teste.minipar  # Exemplo de programa MiniPar
-├── output/            # Arquivos .cpp e .exe gerados
-├── main.py            # Ponto de entrada principal
+│   ├── ast_nodes.py      # Nós da AST (dataclasses)
+│   ├── lexer.py          # Analisador Léxico
+│   ├── parser.py         # Analisador Sintático
+│   ├── semantic.py       # Analisador Semântico
+│   ├── tac.py            # Gerador de Código Intermediário (TAC)
+│   ├── codegen.py        # Gerador de Código C++
+│   └── cpp_template.py   # Template base em C++
+├── static/               # Arquivos estáticos da IDE Web (CSS, JS)
+├── templates/            # Arquivos HTML da IDE Web
+├── tests/                # Exemplos e testes .minipar
+├── output/               # Arquivos gerados (.cpp, .tac e executáveis)
+├── temp_code/            # Códigos temporários executados pela IDE
+├── app.py                # Servidor Flask da Interface Web
+├── main.py               # Ponto de entrada principal (CLI e Interativo)
+├── menu.py               # Menu interativo para terminal
+├── requirements.txt      # Dependências Python
 └── README.md
 ```
 
+---
+
 ## Requisitos
 
-- Python 3.8 ou superior (sem dependências externas)
-- `g++` disponível no PATH (para compilar o C++ gerado)
+- Python 3.8 ou superior
+- `g++` disponível no PATH (para compilar o código C++ gerado)
+- Flask (para executar a IDE Web)
 
-## Como usar
+Instalação das dependências:
 
 ```bash
-# A partir da raiz do projeto
-python main.py tests/teste.minipar teste_math_print
-
-# Executar o binário gerado (Windows)
-.\output\teste_math_print.exe
-
-# Executar o binário gerado (Linux/macOS)
-./output/teste_math_print
+pip install -r requirements.txt
 ```
 
-## Fases do compilador
+---
 
-| Fase | Arquivo         | Descrição                                          |
-|------|-----------------|----------------------------------------------------|
-| 1    | `lexer.py`      | Tokenização do código-fonte MiniPar                |
-| 1    | `parser.py`     | Construção da AST a partir dos tokens              |
-| 2    | `semantic.py`   | Verificação de variáveis declaradas / redeclaradas |
-| 3    | `codegen.py`    | Transpilação para C++ e chamada do `g++ -O3`       |
+## Como Usar
 
-## Sintaxe MiniPar (teste)
+O compilador oferece múltiplas formas de interação.
+
+### 1. Menu Interativo (Terminal ou IDE Web)
+
+Execute o programa sem argumentos:
+
+```bash
+python main.py
+```
+
+Opções disponíveis:
+
+- **[1] Modo Terminal**: navegação pelos testes através de um menu textual.
+- **[2] Modo Web Interface**: inicia o servidor Flask.
+
+Após iniciar a interface web, acesse:
+
+```text
+http://127.0.0.1:5000
+```
+
+A IDE permite:
+
+- Editar código MiniPar
+- Compilar o programa
+- Visualizar o código TAC gerado
+- Visualizar o código C++ gerado
+- Executar o programa e ver a saída
+
+### 2. Execução Direta (CLI)
+
+Para compilar um arquivo específico:
+
+```bash
+python main.py tests/teste3_neuronio.minipar
+```
+
+O nome do arquivo de saída é opcional. Por padrão, será utilizado o mesmo nome do arquivo `.minipar`.
+
+Os arquivos gerados (`.cpp`, `.tac` e executáveis) serão armazenados na pasta `output/`.
+
+---
+
+## Fases do Compilador
+
+| Fase | Arquivos | Descrição |
+|------|----------|------------|
+| 1 | `lexer.py` / `parser.py` | Tokenização do código-fonte e construção da AST |
+| 2 | `semantic.py` | Verificação de declarações, redeclarações e escopo |
+| 3 | `tac.py` | Geração de Código Intermediário (TAC) |
+| 4 | `codegen.py` | Geração de código C++ e compilação automática via `g++ -O3` |
+
+---
+
+## Sintaxe MiniPar
+
+Exemplo:
 
 ```minipar
 seq {
     var x = 42;
+
     print("Valor:", x);
 
     par {
@@ -62,9 +119,15 @@ seq {
 }
 ```
 
-- `seq { ... }` — bloco sequencial
-- `par { ... }` — bloco paralelo (cada instrução vira uma thread)
-- `var nome = expr;` — declaração de variável
-- `nome = expr;` — atribuição
-- `print(expr, ...);` — impressão na saída padrão
-- `#` inicia um comentário de linha
+### Comandos Disponíveis
+
+| Sintaxe | Descrição |
+|----------|------------|
+| `seq { ... }` | Bloco sequencial |
+| `par { ... }` | Bloco paralelo (cada instrução gera uma thread C++) |
+| `var nome = expr;` | Declaração de variável |
+| `nome = expr;` | Atribuição |
+| `print(expr, ...);` | Impressão na saída padrão |
+| `# comentário` | Comentário de linha |
+
+---
