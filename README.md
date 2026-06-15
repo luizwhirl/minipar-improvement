@@ -4,8 +4,11 @@ trabalho de Compiladores - UFAL
 
 Arquitetura orientada a objetos baseada na versão C++ original, agora expandida para incluir **Geração de Código Intermediário (TAC)** de 3 endereços e uma nova **IDE Web**, capaz de gerar, compilar e executar o código C++ produzido pelo compilador.
 Desenvolvido por:
+
 Emanuele Vitória de Jesus Lima - [Manu-Vii](https://github.com/Manu-Vii)
+
 José Lucas de Oliveira Quintela - [lucasqtl](https://github.com/lucasqtl)
+
 Luiz Miguel de Melo Bomfim - [luizwhirl](https://github.com/luizwhirl)
 
 ---
