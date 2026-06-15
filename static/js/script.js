@@ -21,23 +21,23 @@ document.addEventListener("DOMContentLoaded", () => {
         readOnly: true
     });
 
-    const testList = document.getElementById("test-list");
+    const testList       = document.getElementById("test-list");
     const currentFileLabel = document.getElementById("current-file");
     const terminalOutput = document.getElementById("terminal-output");
-    const btnRun = document.getElementById("btn-run");
-    const btnClear = document.getElementById("btn-clear");
-    const tabs = document.querySelectorAll(".tab");
+    const btnRun         = document.getElementById("btn-run");
+    const btnClear       = document.getElementById("btn-clear");
+    const tabs           = document.querySelectorAll(".tab");
 
     // Lógica das Abas C++ / TAC
     tabs.forEach(tab => {
         tab.addEventListener("click", () => {
             tabs.forEach(t => t.classList.remove("active"));
             document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
-            
+
             tab.classList.add("active");
             document.getElementById(tab.dataset.target).classList.add("active");
-            
-            // Recarrega visualmente os editores
+
+            // Recarrega visualmente os editores após troca de aba
             editorCpp.refresh();
             editorTac.refresh();
         });
@@ -57,7 +57,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function loadTest(filename, element) {
         document.querySelectorAll(".test-list li").forEach(li => li.classList.remove("active"));
-        if(element) element.classList.add("active");
+        if (element) element.classList.add("active");
 
         currentFileLabel.textContent = filename;
         terminalOutput.textContent = `Carregando ${filename}...`;
@@ -70,7 +70,7 @@ document.addEventListener("DOMContentLoaded", () => {
         })
         .then(res => res.json())
         .then(data => {
-            if(data.code) {
+            if (data.code) {
                 editorMinipar.setValue(data.code);
                 editorCpp.setValue("");
                 editorTac.setValue("");
@@ -79,11 +79,19 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
+    // FIX: desabilita o botão enquanto compila para evitar cliques duplos
+    // e garante que ele volte ao estado normal sempre (mesmo em caso de erro)
+    function setCompiling(state) {
+        btnRun.disabled = state;
+        btnRun.textContent = state ? "⏳ Compilando..." : "▶ Compile & Run";
+    }
+
     // Botão de Compilar
     btnRun.onclick = () => {
-        const code = editorMinipar.getValue();
+        const code     = editorMinipar.getValue();
         const filename = currentFileLabel.textContent;
-        
+
+        setCompiling(true);
         terminalOutput.textContent = "Rodando compilador...";
         terminalOutput.classList.remove("error-text");
 
@@ -96,9 +104,17 @@ document.addEventListener("DOMContentLoaded", () => {
         .then(data => {
             if (data.cpp) editorCpp.setValue(data.cpp);
             if (data.tac) editorTac.setValue(data.tac);
-            
-            if(data.success) {
+
+            // FIX: força refresh nos dois editores após receber os dados,
+            // independente de qual aba está ativa — resolve dessincronismo de layout
+            setTimeout(() => {
+                editorCpp.refresh();
+                editorTac.refresh();
+            }, 50);
+
+            if (data.success) {
                 terminalOutput.textContent = data.stdout || "Compilação concluída com sucesso!";
+                terminalOutput.classList.remove("error-text");
             } else {
                 terminalOutput.textContent = data.stderr || data.error || "Erro na execução.";
                 terminalOutput.classList.add("error-text");
@@ -107,6 +123,10 @@ document.addEventListener("DOMContentLoaded", () => {
         .catch(err => {
             terminalOutput.textContent = "Erro de conexão com o servidor Backend.";
             terminalOutput.classList.add("error-text");
+        })
+        .finally(() => {
+            // FIX: sempre reativa o botão ao fim, seja sucesso ou erro
+            setCompiling(false);
         });
     };
 
