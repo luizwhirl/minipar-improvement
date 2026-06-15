@@ -53,7 +53,7 @@ class CppCodeGenerator:
         if isinstance(node, FuncCallExpr):
             args = ", ".join(self._translate_expression(a) for a in node.arguments)
             if node.name == "exp":
-                return f"std_exp({args})"
+                return f"std::exp({args})"
             if node.name == "random":
                 return "random_val()"
             if node.name == "len":
@@ -84,16 +84,9 @@ class CppCodeGenerator:
             v = self._translate_expression(node.init_value)
             return f"__make_matrix({r}, {c}, {v})"
         if isinstance(node, IndexExpr):
-            # Acesso duplo a matriz: obj[i][j] -> __mat_at(obj, i, j)
-            if isinstance(node.object, IndexExpr):
-                inner = node.object
-                obj = self._translate_expression(inner.object)
-                row = self._translate_expression(inner.index)
-                col = self._translate_expression(node.index)
-                return f"__mat_at({obj}, (int){row}, (int){col})"
             obj = self._translate_expression(node.object)
             idx = self._translate_expression(node.index)
-            return f"{obj}[(int){idx}]"
+            return f"{obj}[{idx}]"
 
         return "0"
 
@@ -120,8 +113,7 @@ class CppCodeGenerator:
             return f"{indent}{obj}->{node.property_name} = {self._translate_expression(node.value)};\n"
         if isinstance(node, IndexAssign):
             tgt = self._translate_expression(node.target)
-            val = self._translate_expression(node.value)
-            return f"{indent}{tgt} = {val};\n"
+            return f"{indent}{tgt} = {self._translate_expression(node.value)};\n"
         
         if isinstance(node, (MethodCall, FuncCallExpr)):
             return f"{indent}{self._translate_expression(node)};\n"
@@ -168,7 +160,7 @@ class CppCodeGenerator:
             return res
         if isinstance(node, ForStmt):
             if node.iterator_name and node.iterable:
-                res = f"{indent}for (auto& {node.iterator_name} : {self._translate_expression(node.iterable)})\n"
+                res = f"{indent}for (auto {node.iterator_name} : {self._translate_expression(node.iterable)})\n"
                 res += self._translate_statement(node.body, indent if isinstance(node.body, (SeqBlock, ParBlock)) else indent + "    ")
                 return res
             init = self._translate_for_part(node.initializer)
@@ -202,89 +194,54 @@ class CppCodeGenerator:
             return f"{self._translate_expression(node.target)} = {self._translate_expression(node.value)}"
         return self._translate_expression(node)
 
-    def _generate_method(self, method: FuncDecl, indent: str) -> str:
-        """Gera codigo C++ para um metodo de classe.
-        Usa MiniParAny como tipo universal para suportar matrizes e arrays como parametros e retorno."""
-        params = ", ".join(f"MiniParAny {p}" for p in method.params)
-        ret = "MiniParAny" if self._has_value_return(method.body) else "void"
-        code = f"{indent}{ret} {method.name}({params}) {{\n"
-        if isinstance(method.body, SeqBlock):
-            for stmt in method.body.statements:
-                code += self._translate_statement(stmt, indent + "    ")
-        else:
-            code += self._translate_statement(method.body, indent + "    ")
-        code += f"{indent}}}\n"
-        return code
-
     def generate(self, program: Program, output_name: str) -> bool:
         cpp_code = _CPP_HEADER
         
         for node in program.statements:
             if isinstance(node, ClassDecl):
-                cpp_code += f"class {node.name}"
-                if node.superclass:
-                    cpp_code += f" : public {node.superclass}"
-                cpp_code += " {\npublic:\n"
-                
+                cpp_code += f"class {node.name}" + (f" : public {node.superclass}" if node.superclass else "") + " {\npublic:\n"
                 for attr in node.attributes:
                     if attr.init_value:
                         init = self._translate_expression(attr.init_value)
-                        # Usa MiniParAny para atributos que podem ser matrizes/arrays
-                        if isinstance(attr.init_value, (MatrixCreateExpr, ListLiteral)):
-                            cpp_code += f"    MiniParAny {attr.name} = {init};\n"
-                        else:
-                            cpp_code += f"    decltype({init}) {attr.name} = {init};\n"
+                        cpp_code += f"    decltype({init}) {attr.name} = {init};\n"
                     else:
                         cpp_code += f"    double {attr.name} = 0;\n"
-                
                 for method in node.methods:
-                    cpp_code += self._generate_method(method, "    ")
-                
+                    params = ", ".join(f"auto {p}" for p in method.params)
+                    ret = "auto" if self._has_value_return(method.body) else "void"
+                    cpp_code += f"    {ret} {method.name}({params}) {{\n"
+                    if isinstance(method.body, SeqBlock):
+                        for stmt in method.body.statements: cpp_code += self._translate_statement(stmt, "        ")
+                    else: cpp_code += self._translate_statement(method.body, "        ")
+                    cpp_code += "    }\n"
                 cpp_code += "};\n\n"
-            
             elif isinstance(node, FuncDecl):
-                # Funcoes livres tambem usam MiniParAny para suportar matrizes como parametros/retorno
-                params = ", ".join(f"MiniParAny {p}" for p in node.params)
-                ret = "MiniParAny" if self._has_value_return(node.body) else "void"
+                params = ", ".join(f"auto {p}" for p in node.params)
+                ret = "auto" if self._has_value_return(node.body) else "void"
                 cpp_code += f"{ret} {node.name}({params}) {{\n"
                 if isinstance(node.body, SeqBlock):
-                    for stmt in node.body.statements:
-                        cpp_code += self._translate_statement(stmt, "    ")
-                else:
-                    cpp_code += self._translate_statement(node.body, "    ")
+                    for stmt in node.body.statements: cpp_code += self._translate_statement(stmt, "    ")
+                else: cpp_code += self._translate_statement(node.body, "    ")
                 cpp_code += "}\n\n"
 
-        cpp_code += "int main() {\n"
-        cpp_code += "    #ifdef _WIN32\n"
-        cpp_code += "        WSADATA wsa;\n"
-        cpp_code += "        WSAStartup(MAKEWORD(2,2), &wsa);\n"
-        cpp_code += "    #endif\n\n"
-        
+        cpp_code += "int main() {\n    #ifdef _WIN32\n        WSADATA wsa;\n        WSAStartup(MAKEWORD(2,2), &wsa);\n    #endif\n\n"
         for node in program.statements:
             if not isinstance(node, (ClassDecl, FuncDecl)):
                 if isinstance(node, SeqBlock):
-                    for stmt in node.statements:
-                        cpp_code += self._translate_statement(stmt, "    ")
-                else:
-                    cpp_code += self._translate_statement(node, "    ")
-        
+                    for stmt in node.statements: cpp_code += self._translate_statement(stmt, "    ")
+                else: cpp_code += self._translate_statement(node, "    ")
         cpp_code += "\n    return 0;\n}\n"
 
         os.makedirs("output", exist_ok=True)
         cpp_path = os.path.join("output", f"{output_name}.cpp")
         exe_path = os.path.join("output", f"{output_name}.exe")
 
-        with open(cpp_path, "w", encoding="utf-8") as f:
-            f.write(cpp_code)
+        with open(cpp_path, "w", encoding="utf-8") as f: f.write(cpp_code)
         
         print("[CODEGEN] Compilando via g++ com -std=c++20 e -O3...")
-        result = subprocess.run(
-            ["g++", "-std=c++20", "-O3", cpp_path, "-o", exe_path, "-pthread", "-lws2_32"],
-            capture_output=True, text=True
-        )
+        result = subprocess.run(["g++", "-std=c++20", "-O3", cpp_path, "-o", exe_path, "-pthread", "-lws2_32"])
         if result.returncode == 0:
             print(f"[SUCESSO] Executavel: {exe_path}")
             return True
-        print("[ERRO] Falha na compilacao g++:", file=sys.stderr)
-        print(result.stderr, file=sys.stderr)
+        print("[ERRO] Falha na compilacao.", file=sys.stderr)
         return False

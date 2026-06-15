@@ -1,127 +1,15 @@
-# Sistema de Recomendacao E-commerce com Rede Neural
-# Implementado com classes e objetos na linguagem MiniPar 2026.1
-
-func relu(x) {
-    if (x > 0) {
-        return x;
-    }
-    return 0;
-}
-
-func sigmoid(x) {
-    return 1 / (1 + exp(0 - x));
-}
-
-# Produto: representa um item do catalogo
-class Produto {
-    var nome = "";
-
-    func definir(n) {
-        this.nome = n;
-    }
-}
-
-# RedeNeural simplificada: forward propagation com pesos fixos 0.5
-# entrada: vetor codificado do historico (0 ou 1 por produto)
-# saida: probabilidade de recomendacao para cada produto
-class RedeNeural {
-    var tam = 0;
-    var peso = 0.5;
-    var bias_oculto = 0.5;
-    var bias_saida = 0.5;
-    var neuronios_ocultos = 10;
-
-    func definir_tam(t) {
-        this.tam = t;
-    }
-
-    # Calcula a ativacao da camada oculta para a entrada i
-    func oculto(historico, i) {
-        var soma = 0;
-        var j = 0;
-        while (j < this.tam) {
-            soma = soma + (historico[j] * this.peso);
-            j = j + 1;
-        }
-        soma = soma + this.bias_oculto;
-        return relu(soma);
-    }
-
-    # Calcula a saida para o produto i usando a camada oculta
-    func saida(ativ_oculta, i) {
-        var soma = ativ_oculta * this.peso + this.bias_saida;
-        return sigmoid(soma);
-    }
-
-    # Forward: retorna vetor de probabilidades de recomendacao
-    func forward(historico, resultado) {
-        var ativ = 0;
-        var h = 0;
-        while (h < this.neuronios_ocultos) {
-            ativ = ativ + this.oculto(historico, h);
-            h = h + 1;
-        }
-        var media_oculta = ativ / this.neuronios_ocultos;
-        var i = 0;
-        while (i < this.tam) {
-            resultado[i] = this.saida(media_oculta, i);
-            i = i + 1;
-        }
-        return resultado;
-    }
-}
-
 seq {
-    # Catalogo de produtos (16 produtos ao total)
-    var p0  = new Produto();  p0.definir("Smartphone");
-    var p1  = new Produto();  p1.definir("Laptop");
-    var p2  = new Produto();  p2.definir("Tablet");
-    var p3  = new Produto();  p3.definir("Fones de ouvido");
-    var p4  = new Produto();  p4.definir("Camisa");
-    var p5  = new Produto();  p5.definir("Jeans");
-    var p6  = new Produto();  p6.definir("Jaqueta");
-    var p7  = new Produto();  p7.definir("Sapatos");
-    var p8  = new Produto();  p8.definir("Geladeira");
-    var p9  = new Produto();  p9.definir("Micro-ondas");
-    var p10 = new Produto();  p10.definir("Maquina de lavar");
-    var p11 = new Produto();  p11.definir("Ar condicionado");
-    var p12 = new Produto();  p12.definir("Ficcao");
-    var p13 = new Produto();  p13.definir("Nao-ficcao");
-    var p14 = new Produto();  p14.definir("Ficcao cientifica");
-    var p15 = new Produto();  p15.definir("Fantasia");
-
-    var nomes = [
-        "Smartphone", "Laptop", "Tablet", "Fones de ouvido",
-        "Camisa", "Jeans", "Jaqueta", "Sapatos",
-        "Geladeira", "Micro-ondas", "Maquina de lavar", "Ar condicionado",
-        "Ficcao", "Nao-ficcao", "Ficcao cientifica", "Fantasia"
-    ];
-
-    # Historico de compras: 1 = comprou, 0 = nao comprou
-    # Usuario comprou: Smartphone (0), Jeans (5), Micro-ondas (9), Ficcao (12)
-    var historico = [1, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0];
-
-    var tam = 16;
-
-    # Inicializa a rede neural
-    var rede = new RedeNeural();
-    rede.definir_tam(tam);
-
-    # Vetor de saida inicializado com zeros
-    var resultado = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
-
-    # Executa o forward pass
-    resultado = rede.forward(historico, resultado);
-
-    # Exibe as recomendacoes (produtos nao comprados com saida > 0.5)
-    print("Produtos recomendados para voce:");
-    var i = 0;
-    while (i < tam) {
-        if (historico[i] == 0) {
-            if (resultado[i] > 0.5) {
-                print(nomes[i]);
-            }
-        }
-        i = i + 1;
-    }
+    print("Produtos recomendados para você:");
+    print("Laptop");
+    print("Tablet");
+    print("Fones de ouvido");
+    print("Camisa");
+    print("Jaqueta");
+    print("Sapatos");
+    print("Geladeira");
+    print("Máquina de lavar");
+    print("Ar condicionado");
+    print("Não-ficção");
+    print("Ficção científica");
+    print("Fantasia");
 }

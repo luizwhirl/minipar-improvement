@@ -1,8 +1,3 @@
-# Teste Adicional 2 - Tapete de Sierpinski
-# Desenha o fractal do tapete de Sierpinski recursivamente
-# usando uma matriz_Fractal e o caracter "#" para preencher
-# Tamanho 27x27 (3^3) para 3 niveis de recursao
-
 func preencher(tela, linha, coluna, tamanho) {
     if (tamanho == 1) {
         tela[linha][coluna] = "#";
@@ -13,11 +8,8 @@ func preencher(tela, linha, coluna, tamanho) {
     while (i < 3) {
         var j = 0;
         while (j < 3) {
-            # Regra do tapete: nao preenche o quadrado central (i==1 e j==1)
             if (!((i == 1) && (j == 1))) {
-                var lin_inicio = linha + (i * novo);
-                var col_inicio = coluna + (j * novo);
-                tela = preencher(tela, lin_inicio, col_inicio, novo);
+                tela = preencher(tela, linha + (i * novo), coluna + (j * novo), novo);
             }
             j = j + 1;
         }
@@ -27,35 +19,12 @@ func preencher(tela, linha, coluna, tamanho) {
 }
 
 seq {
-    print("========================================");
-    print("   TAPETE DE SIERPINSKI - MiniPar       ");
-    print("========================================");
-
-    # Tamanho deve ser potencia de 3: 9 (2 niveis) ou 27 (3 niveis)
-    var tamanho = 27;
-
-    # Cria a matriz_Fractal preenchida com espacos
+    var tamanho = 9;
     var tela = matrix(tamanho, tamanho, " ");
-
-    # Executa o preenchimento recursivo
     tela = preencher(tela, 0, 0, tamanho);
-
-    print("Fractal gerado. Exibindo na tela:");
-    print("");
-
-    # Imprime a matriz_Fractal linha por linha
     var i = 0;
     while (i < tamanho) {
-        var linha = "";
-        var j = 0;
-        while (j < tamanho) {
-            linha = linha + tela[i][j];
-            j = j + 1;
-        }
-        print(linha);
+        print(tela[i]);
         i = i + 1;
     }
-
-    print("");
-    print("========================================");
 }

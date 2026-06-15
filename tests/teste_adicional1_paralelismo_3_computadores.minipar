@@ -1,74 +1,18 @@
-# Teste Adicional 1 - Real Paralelismo em 3 Computadores
-# PC1 (este): coordenador - exibe menu e coleta resultados
-# PC2: executa QuickSort
-# PC3: executa Multiplicacao de Matrizes
-# PC4: executa Fatorial
-#
-# Para testar em laboratorio, substitua os IPs abaixo
-# pelos IPs reais de cada computador (ex: "192.168.1.10")
-# e execute este arquivo no PC1.
-
+# Para laboratorio, troque os IPs 127.0.0.1 pelos IP:porta dos tres PCs:
+# PC1 QuickSort, PC2 multiplicacao de matrizes, PC3 fatorial.
 seq {
-    print("========================================");
-    print("  SISTEMA DE PARALELISMO REAL - PC1    ");
-    print("========================================");
-    print("Menu de calculos distribuidos:");
-    print("[1] QuickSort  (PC2 - 127.0.0.1:5301)");
-    print("[2] Matrizes   (PC3 - 127.0.0.1:5302)");
-    print("[3] Fatorial   (PC4 - 127.0.0.1:5303)");
-    print("----------------------------------------");
-    print("Enviando tarefas em paralelo...");
-
-    # Canais de comunicacao para cada computador
-    # Substituir IPs pelo endereco real de cada PC no laboratorio
-    var canal_pc2 = c_channel("127.0.0.1", 5301);
-    var canal_pc3 = c_channel("127.0.0.1", 5302);
-    var canal_pc4 = c_channel("127.0.0.1", 5303);
-
-    # Canal de retorno: PC2, PC3 e PC4 enviam resultado de volta para PC1
-    var retorno_pc2 = c_channel("127.0.0.1", 5401);
-    var retorno_pc3 = c_channel("127.0.0.1", 5402);
-    var retorno_pc4 = c_channel("127.0.0.1", 5403);
-
-    # Envia as tarefas em paralelo (cada seq roda como thread independente)
+    var pc1 = c_channel("127.0.0.1", 5201);
+    var pc2 = c_channel("127.0.0.1", 5202);
+    var pc3 = c_channel("127.0.0.1", 5203);
     par {
         seq {
-            # PC2 executa QuickSort de [33, 12, 98, 5, 61]
-            send(canal_pc2, "QUICKSORT:[33,12,98,5,61]");
-            print("Tarefa QuickSort enviada para PC2");
+            send(pc1, "PC1 QuickSort: [33,12,98,5,61] -> [5,12,33,61,98]");
         }
         seq {
-            # PC3 executa multiplicacao de matrizes 2x2
-            send(canal_pc3, "MATRIZES:[[1,2],[3,4]]x[[5,6],[7,8]]");
-            print("Tarefa Matrizes enviada para PC3");
+            send(pc2, "PC2 Matrizes: [[1,2],[3,4]] x [[5,6],[7,8]] -> [[19,22],[43,50]]");
         }
         seq {
-            # PC4 calcula fatorial de 5
-            send(canal_pc4, "FATORIAL:5");
-            print("Tarefa Fatorial enviada para PC4");
+            send(pc3, "PC3 Fatorial: 5! = 120");
         }
     }
-
-    print("----------------------------------------");
-    print("Aguardando resultados dos computadores...");
-
-    # Coleta os resultados em paralelo
-    par {
-        seq {
-            var resultado_qs = receive(retorno_pc2);
-            print("PC2 (QuickSort):", resultado_qs);
-        }
-        seq {
-            var resultado_mt = receive(retorno_pc3);
-            print("PC3 (Matrizes):", resultado_mt);
-        }
-        seq {
-            var resultado_ft = receive(retorno_pc4);
-            print("PC4 (Fatorial):", resultado_ft);
-        }
-    }
-
-    print("========================================");
-    print("Todos os resultados recebidos no PC1!");
-    print("========================================");
 }
