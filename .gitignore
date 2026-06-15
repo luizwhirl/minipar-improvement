@@ -1,7 +1,6 @@
 .vscode
 
 # ./output
-# output
 /output/*
 meu_teste.cpp
 meu_teste.exe
