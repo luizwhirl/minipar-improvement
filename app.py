@@ -4,6 +4,21 @@ import os
 import sys
 import glob
 
+from test_orchestrator import (
+    get_spec_summary,
+    finalize_test_execution,
+    check_active_session_for_new_terminal,
+    join_session,
+    get_terminal_id,
+    create_session,
+    clear_session,
+    set_session_phase,
+    append_session_log,
+    record_execution_output,
+    _load_session,
+    _save_session,
+)
+
 app = Flask(__name__)
 
 # Configuração de Diretórios
@@ -33,11 +48,71 @@ def get_test():
             return jsonify({"code": f.read()})
     return jsonify({"error": "Arquivo não encontrado"}), 404
 
+@app.route('/api/test_spec', methods=['POST'])
+def get_test_spec_api():
+    filename = request.json.get('filename')
+    spec = get_spec_summary(filename)
+    if spec:
+        return jsonify(spec)
+    return jsonify({"requires_input": False, "multi_computer": None})
+
+
+@app.route('/api/session', methods=['GET'])
+def get_session():
+    action, session = check_active_session_for_new_terminal()
+    if session:
+        return jsonify({
+            "active": session.get("status") not in ("completed", "cancelled"),
+            "session": session,
+            "terminal_id": get_terminal_id(),
+            "needs_choice": action is not None,
+        })
+    return jsonify({"active": False, "terminal_id": get_terminal_id()})
+
+
+@app.route('/api/session/join', methods=['POST'])
+def session_join():
+    _, session = check_active_session_for_new_terminal()
+    if session:
+        join_session(session)
+        return jsonify({"success": True, "session": session})
+    return jsonify({"success": False, "error": "Nenhuma sessão ativa"}), 404
+
+
+@app.route('/api/session/create', methods=['POST'])
+def session_create():
+    filename = request.json.get('filename')
+    spec = get_spec_summary(filename)
+    if not spec or not spec.get('multi_computer'):
+        return jsonify({"success": False, "error": "Teste não requer multi-computador"}), 400
+    from test_orchestrator import TEST_SPECS
+    full_spec = TEST_SPECS.get(filename, spec)
+    session = create_session(filename, full_spec)
+    return jsonify({"success": True, "session": session})
+
+
+@app.route('/api/session/ready', methods=['POST'])
+def session_ready():
+    session = _load_session()
+    if session:
+        session["status"] = "running"
+        _save_session(session)
+        return jsonify({"success": True})
+    return jsonify({"success": False}), 404
+
+
+@app.route('/api/session/clear', methods=['POST'])
+def session_clear():
+    clear_session()
+    return jsonify({"success": True})
+
+
 @app.route('/api/compile', methods=['POST'])
 def compile_code():
     data = request.json
     code = data.get('code')
     filename = data.get('filename', 'ide_temp.minipar')
+    user_inputs = data.get('inputs', [])
     
     # Salva o código recebido da IDE em um arquivo temporário
     file_path = os.path.join(TEMP_DIR, filename)
@@ -45,8 +120,11 @@ def compile_code():
         f.write(code)
         
     base_name = filename.replace('.minipar', '')
+    stdin_lines = user_inputs
     
     try:
+        set_session_phase("compiling", "Compilando código MiniPar...", percent=60)
+        append_session_log("Compilação iniciada via IDE Web.")
         # ==========================================
         # 1. FASE DE COMPILAÇÃO (Gera TAC e C++)
         # ==========================================
@@ -68,22 +146,29 @@ def compile_code():
         # 2. FASE DE EXECUÇÃO (Roda o Binário C++)
         # ==========================================
         if success:
+            set_session_phase("compiling", "Compilação concluída.", percent=80)
+            append_session_log("Compilação concluída — executando binário.")
             exe_ext = ".exe" if sys.platform == "win32" else ""
             exe_path = os.path.join(OUTPUT_DIR, f"{base_name}{exe_ext}")
             
             if os.path.exists(exe_path):
                 full_output += f"\n--- Executando {base_name} ---\n"
+                set_session_phase("executing", f"Executando {base_name}...", percent=90)
                 try:
-                    # Executa o arquivo gerado
+                    stdin_data = None
+                    if stdin_lines:
+                        stdin_data = "\n".join(stdin_lines) + "\n"
                     exe_proc = subprocess.run(
                         [os.path.abspath(exe_path)], 
+                        input=stdin_data,
                         capture_output=True, 
                         text=True, 
-                        timeout=10 # Previne travamentos se o código esperar um "input" infinito
+                        timeout=30
                     )
                     full_output += exe_proc.stdout
                     if exe_proc.stderr:
                         full_output += "\n[ERRO NA EXECUÇÃO]:\n" + exe_proc.stderr
+                    record_execution_output(exe_proc.stdout or "")
                 except subprocess.TimeoutExpired:
                     full_output += "\n[ERRO] Tempo limite de execução excedido (O programa entrou em loop infinito ou aguarda entrada de dados do usuário?)."
                     success = False
@@ -92,6 +177,11 @@ def compile_code():
                     success = False
                 
                 full_output += "\n" + "-" * 40
+
+                if filename.endswith('.minipar'):
+                    test_source = os.path.join(TESTS_DIR, filename)
+                    if os.path.exists(test_source):
+                        finalize_test_execution(test_source, full_output)
         
         # ==========================================
         # 3. COLETA DOS ARQUIVOS GERADOS

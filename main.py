@@ -45,6 +45,29 @@ def compile_file(source_path: str, output_name: str) -> bool:
 
 def start_interactive():
     """Inicia a tela de seleção inicial do sistema."""
+    from test_orchestrator import (
+        check_active_session_for_new_terminal,
+        join_session,
+        get_terminal_id,
+        run_joiner_progress_monitor,
+        _load_session,
+    )
+
+    # Detecta sessão multi-terminal ativa (novo terminal entrando)
+    action, session = check_active_session_for_new_terminal()
+    if action == "join" and session:
+        join_session(session)
+        session = _load_session() or session
+        print("\n" + "=" * 45)
+        print("  MINIPAR — PARTICIPANTE DE TESTE")
+        print("=" * 45)
+        print(f"\n  Terminal identificado: {get_terminal_id()}")
+        print(f"  Teste em andamento: {session.get('titulo', session.get('test_file', ''))}")
+        print("\n  Monitor de progresso iniciado...\n")
+        run_joiner_progress_monitor(session)
+    elif action == "independent":
+        print("\n  [INFO] Sessão em andamento ignorada — modo independente.\n")
+
     print("\n" + "=" * 45)
     print("      MINIPAR COMPILER & IDE")
     print("=" * 45)
