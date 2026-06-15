@@ -42,7 +42,7 @@
 | Símbolo | Significado |
 |---------|-------------|
 | `::=` | Definição de produção |
-| `|` | Alternativa (ou) |
+| `\|` | Alternativa (ou) |
 | `{ x }` | Zero ou mais repetições de `x` |
 | `[ x ]` | Opcional (zero ou uma ocorrência de `x`) |
 | `( x )` | Agrupamento |
