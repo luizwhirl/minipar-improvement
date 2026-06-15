@@ -26,13 +26,15 @@ def _find_inputs(source: str) -> list[dict[str, str]]:
     """Detecta chamadas input() no código MiniPar."""
     inputs: list[dict[str, str]] = []
 
+    # input("prompt") — cada prompt vira uma entrada identificada
     for match in re.finditer(r'input\s*\(\s*"((?:\\.|[^"\\])*)"\s*\)', source):
         prompt = match.group(1).replace("\\n", "\n").replace('\\"', '"')
         if prompt == "":
-            continue
+            continue  # input("") é tratado abaixo (geralmente dentro de loop)
         desc = prompt.strip() if prompt.strip() else "Entrada do teclado"
         inputs.append({"prompt": prompt, "descricao": desc})
 
+    # input() ou input("") sem prompt: expande pelo limite do while (ex.: i < 16)
     bare_count = len(re.findall(r'input\s*\(\s*\)', source))
     empty_quoted = len(re.findall(r'input\s*\(\s*""\s*\)', source))
     empty_total = bare_count + empty_quoted
@@ -63,8 +65,9 @@ def analyze_program(source_path: str) -> dict[str, Any]:
     channel_count = _count_channels(source)
 
     multi_computer: Optional[dict[str, Any]] = None
+    # c_channel + send/receive indica comunicação entre terminais distintos
     if channel_count > 0 and (has_send or has_receive):
-        count = max(channel_count, 2)
+        count = max(channel_count, 2)  # mínimo cliente + servidor
         roles = [f"computador_{i + 1}" for i in range(count)]
         multi_computer = {
             "required": True,

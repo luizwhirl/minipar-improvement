@@ -35,10 +35,12 @@ def executar_binario(output_name: str, interactive: bool = False) -> str:
 
     try:
         if interactive:
+            # stdin conectado ao terminal — necessário para input() no código MiniPar
             result = subprocess.run([abs_exe_path], text=True)
             if result.returncode != 0:
                 print(f"[ERRO] Programa encerrou com codigo {result.returncode}.")
             return ""
+        # Programas sem input(): captura saída para exibir nos terminais participantes
         result = subprocess.run(
             [abs_exe_path],
             text=True,
@@ -78,6 +80,7 @@ def rodar_teste(test_path: str) -> None:
         return
 
     if is_joiner:
+        # Participante já acompanhou via run_joiner_progress_monitor — não reexecuta
         print(f"\n  Terminal participante: {get_terminal_id()}\n")
         return
 
@@ -139,6 +142,7 @@ def escolher_teste():
 
 
 def _verificar_sessao_ao_iniciar() -> None:
+    """Novo terminal que entra no menu durante execução multi-terminal em andamento."""
     action, session = check_active_session_for_new_terminal()
     if action == "join" and session:
         join_session(session)

@@ -14,6 +14,7 @@ from typing import Any, Optional
 
 from program_analyzer import get_program_spec
 
+# Estado compartilhado entre terminais via arquivo JSON (sem servidor externo)
 SESSION_FILE = os.path.join("output", ".test_session.json")
 _SPINNER = ["|", "/", "-", "\\"]
 
@@ -28,6 +29,7 @@ _PHASE_ACTIVITY = {
 
 
 def get_terminal_id() -> str:
+    # hostname + PID identifica cada terminal de forma única na sessão
     hostname = socket.gethostname()
     return f"{hostname}-{os.getpid()}"
 
@@ -145,6 +147,7 @@ def _print_joiner_summary(session: dict[str, Any], my_role: str) -> None:
 
 
 def run_joiner_progress_monitor(session: dict[str, Any]) -> bool:
+    """Terminal participante: lê SESSION_FILE em loop e exibe progresso."""
     terminal_id = get_terminal_id()
     my_role = _get_participant_role(session, terminal_id)
     last_log_count = 0
@@ -162,6 +165,7 @@ def run_joiner_progress_monitor(session: dict[str, Any]) -> bool:
             return True
 
         log = current.get("progress_log", [])
+        # Imprime apenas entradas novas desde a última iteração
         for entry in log[last_log_count:]:
             prefix = "→" if entry.get("source") == "initiator" else "•"
             print(f"  {prefix} [{entry['time']}] {entry['message']}")
@@ -395,11 +399,14 @@ def check_active_session_for_new_terminal() -> tuple[Optional[str], Optional[dic
 def prepare_test_execution(test_path: str) -> tuple[bool, bool, bool]:
     """
     Prepara execução. Retorna (proceed, interactive_input, is_joiner).
-    interactive_input=True → executar binário com stdin do terminal (input() no código).
+
+    - interactive_input: True quando o .minipar usa input() — stdin fica no terminal
+    - is_joiner: True quando este terminal só acompanha (não compila nem executa)
     """
     spec = get_program_spec(test_path)
     is_joiner = False
 
+    # Terminal abriu outro programa enquanto há sessão ativa
     active_session = _load_session()
     if active_session and active_session.get("test_file") != os.path.basename(test_path):
         action, _ = check_active_session_for_new_terminal()
@@ -419,11 +426,13 @@ def prepare_test_execution(test_path: str) -> tuple[bool, bool, bool]:
 
         if session and session.get("test_file") == filename:
             participants = session.get("participants", [])
+            # Quem criou a sessão (ou primeiro participante) conduz compilação/execução
             is_initiator = session.get("initiator_terminal") == terminal_id or (
                 participants and participants[0]["terminal_id"] == terminal_id
             )
 
             if not is_initiator:
+                # Demais terminais entram na sessão e aguardam o monitor de progresso
                 if not any(p["terminal_id"] == terminal_id for p in participants):
                     action, _ = check_active_session_for_new_terminal()
                     if action == "join":
@@ -475,7 +484,7 @@ def finalize_test_execution(test_path: str, output: str = "") -> None:
             "source": "initiator",
         })
         _save_session(session)
-        time.sleep(2)
+        time.sleep(2)  # tempo para terminais participantes lerem status "completed"
         clear_session()
 
 

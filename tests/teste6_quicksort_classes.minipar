@@ -1,5 +1,9 @@
 class Quicksort {
-    var array = [10, -3, -40, 80, 70, -100];
+    var array = [0];
+
+    func carregar(arr) {
+        this.array = arr;
+    }
 
     func trocar(i, j) {
         var temp = this.array[i];
@@ -32,7 +36,10 @@ class Quicksort {
     }
 
     func ordenar() {
-        this.quicksort(0, 5);
+        var n = len(this.array) - 1;
+        if (n >= 0) {
+            this.quicksort(0, n);
+        }
         return this.array;
     }
 }
@@ -41,9 +48,10 @@ seq {
     print("==== Ordenacao com Quicksort ====");
     print("Insira os elementos do vetor separados por espaco:");
     var entrada = input("");
-    print("Entrada recebida:", entrada);
+    var vetor = parse_ints(entrada);
+    print("Vetor original:", vetor);
     var algoritmo = new Quicksort();
-    print("Vetor original:", algoritmo.array);
+    algoritmo.carregar(vetor);
     var vetor_ordenado = algoritmo.ordenar();
     print("Vetor ordenado:", vetor_ordenado);
 }

@@ -50,6 +50,7 @@ def get_test():
 
 @app.route('/api/test_spec', methods=['POST'])
 def get_test_spec_api():
+    """Requisitos detectados automaticamente pelo program_analyzer."""
     filename = request.json.get('filename')
     spec = get_spec_summary(filename)
     if spec:
@@ -122,7 +123,7 @@ def compile_code():
         f.write(code)
         
     base_name = filename.replace('.minipar', '')
-    stdin_lines = user_inputs
+    stdin_lines = user_inputs  # valores coletados pela IDE para input() no .minipar
     
     try:
         set_session_phase("compiling", "Compilando código MiniPar...", percent=60)

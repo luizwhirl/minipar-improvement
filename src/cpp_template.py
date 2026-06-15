@@ -1,6 +1,7 @@
 _CPP_HEADER = """\
 #include <iostream>
 #include <string>
+#include <sstream>
 #include <vector>
 #include <thread>
 #include <memory>
@@ -35,6 +36,17 @@ std::string input() {
 std::string input(const std::string& prompt) {
     std::cout << prompt;
     return input();
+}
+
+// Converte linha com inteiros separados por espaco em vetor (ex.: "10 -3 80")
+std::vector<double> __parse_ints(const std::string& s) {
+    std::vector<double> result;
+    std::istringstream iss(s);
+    double n;
+    while (iss >> n) {
+        result.push_back(n);
+    }
+    return result;
 }
 
 std::vector<int> __minipar_range(int end) {

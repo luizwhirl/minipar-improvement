@@ -62,6 +62,8 @@ class CppCodeGenerator:
                 return f"__minipar_range({args})"
             if node.name == "to_number":
                 return f"std::stod({args})"
+            if node.name == "parse_ints":
+                return f"__parse_ints({args})"
             return f"{node.name}({args})"
 
         if isinstance(node, CChannelExpr):
@@ -124,6 +126,7 @@ class CppCodeGenerator:
     def _return_type(self, body: Optional[ASTNode]) -> str:
         if not self._has_value_return(body):
             return "void"
+        # auto falha no g++ quando há return double e return 0 (int) na mesma função
         if self._uses_float_return(body):
             return "double"
         return "auto"

@@ -53,7 +53,7 @@ def start_interactive():
         _load_session,
     )
 
-    # Detecta sessão multi-terminal ativa (novo terminal entrando)
+    # Segundo terminal detectou sessão ativa — entra como participante antes do menu
     action, session = check_active_session_for_new_terminal()
     if action == "join" and session:
         join_session(session)

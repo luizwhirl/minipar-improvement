@@ -1,3 +1,4 @@
+# Calcula operação aritmética recebida como string (ex.: "+", "-", "*", "/")
 func calcular(op, v1, v2) {
     if (op == "+") {
         return v1 + v2;
@@ -21,6 +22,7 @@ seq {
     var resposta = c_channel("127.0.0.1", 5102);
 
     par {
+        # Thread servidor: recebe operação e operandos, devolve resultado
         seq {
             var op = receive(requisicao);
             var s_v1 = receive(requisicao);
@@ -31,6 +33,7 @@ seq {
             var res = calcular(op, v1, v2);
             send(resposta, res);
         }
+        # Thread cliente: lê input do usuário e envia ao servidor
         seq {
             var operacao = input("Operacao (+,-,*,/): ");
             var operando1 = input("Operando 1: ");

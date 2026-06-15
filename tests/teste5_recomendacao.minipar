@@ -80,6 +80,7 @@ func nome_produto(indice) {
 }
 
 func ler_historico_compras() {
+    # Vetor binário: 1 = comprou, 0 = não comprou (16 produtos do catálogo)
     var historico = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
     print("==== Teste 5: recomendacao e-commerce com rede neural ====");
     print("Informe o historico de compras (1 = comprou, 0 = nao comprou):");
@@ -94,13 +95,14 @@ func ler_historico_compras() {
 
 class RedeNeuralRecomendacao {
     var input_size = 16;
-    var hidden_size = 10;
-    var output_size = 16;
+    var hidden_size = 10;   # camada oculta com ReLU
+    var output_size = 16;   # uma saída sigmoid por produto
 
     func forward(historico) {
         var ocultas = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
         var saidas = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 
+        # Camada oculta: entrada × pesos + bias → ReLU
         var h = 0;
         while (h < this.hidden_size) {
             var soma_oculta = 0.0;
@@ -116,6 +118,7 @@ class RedeNeuralRecomendacao {
         }
 
         var produto = 0;
+        # Camada de saída: ocultas × pesos + bias → sigmoid (probabilidade 0–1)
         while (produto < this.output_size) {
             var soma_saida = 0.0;
             var neuronio = 0;
@@ -142,6 +145,7 @@ class Recomendador {
 
         var produto = 0;
         while (produto < 16) {
+            # Recomenda apenas produtos não comprados com probabilidade > 0.55
             if ((historico[produto] == 0) && (probabilidades[produto] > 0.55)) {
                 print(nome_produto(produto), "probabilidade:", probabilidades[produto]);
             }
