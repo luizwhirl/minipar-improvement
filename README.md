@@ -1,5 +1,5 @@
 # Compilador MiniPar
-trabalho de Compiladores - UFAL 
+Trabalho de Compiladores - UFAL 
 
 
 Arquitetura orientada a objetos baseada na versão C++ original, agora expandida para incluir **Geração de Código Intermediário (TAC)** de 3 endereços e uma nova **IDE Web**, capaz de gerar, compilar e executar o código C++ produzido pelo compilador.
