@@ -3,6 +3,7 @@ func preencher(tela, linha, coluna, tamanho) {
         tela[linha][coluna] = "#";
         return tela;
     }
+
     var novo = tamanho / 3;
     var i = 0;
     while (i < 3) {
@@ -15,13 +16,16 @@ func preencher(tela, linha, coluna, tamanho) {
         }
         i = i + 1;
     }
+
     return tela;
 }
 
 seq {
+    print("==== Teste adicional 2: tapete de Sierpinski ====");
     var tamanho = 9;
     var tela = matrix(tamanho, tamanho, " ");
     tela = preencher(tela, 0, 0, tamanho);
+
     var i = 0;
     while (i < tamanho) {
         print(tela[i]);

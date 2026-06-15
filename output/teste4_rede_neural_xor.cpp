@@ -140,16 +140,90 @@ auto sigmoid(auto x) {
     return (1 / (1 + std::exp((0 - x))));
 }
 
+auto derivada_sigmoid(auto saida) {
+    return (saida * (1 - saida));
+}
+
+class RedeNeuralXOR {
+public:
+    decltype(0.5) taxa_aprendizado = 0.5;
+    decltype(0.2) h1_w1 = 0.2;
+    decltype((-0.4)) h1_w2 = (-0.4);
+    decltype(0.0) h1_bias = 0.0;
+    decltype((-0.3)) h2_w1 = (-0.3);
+    decltype(0.6) h2_w2 = 0.6;
+    decltype(0.1) h2_bias = 0.1;
+    decltype(0.7) h3_w1 = 0.7;
+    decltype(0.5) h3_w2 = 0.5;
+    decltype((-0.2)) h3_bias = (-0.2);
+    decltype(0.4) out_w1 = 0.4;
+    decltype((-0.5)) out_w2 = (-0.5);
+    decltype(0.3) out_w3 = 0.3;
+    decltype(0.0) out_bias = 0.0;
+    decltype(0.0) h1 = 0.0;
+    decltype(0.0) h2 = 0.0;
+    decltype(0.0) h3 = 0.0;
+    decltype(0.0) saida = 0.0;
+    auto feedforward(auto x1, auto x2) {
+        this->h1 = sigmoid((((x1 * this->h1_w1) + (x2 * this->h1_w2)) + this->h1_bias));
+        this->h2 = sigmoid((((x1 * this->h2_w1) + (x2 * this->h2_w2)) + this->h2_bias));
+        this->h3 = sigmoid((((x1 * this->h3_w1) + (x2 * this->h3_w2)) + this->h3_bias));
+        this->saida = sigmoid(((((this->h1 * this->out_w1) + (this->h2 * this->out_w2)) + (this->h3 * this->out_w3)) + this->out_bias));
+        return this->saida;
+    }
+    void treinar_amostra(auto x1, auto x2, auto desejado) {
+        auto previsto = this->feedforward(x1, x2);
+        auto erro = (desejado - previsto);
+        auto delta_saida = (erro * derivada_sigmoid(previsto));
+        auto antigo_out_w1 = this->out_w1;
+        auto antigo_out_w2 = this->out_w2;
+        auto antigo_out_w3 = this->out_w3;
+        this->out_w1 = (this->out_w1 + ((this->h1 * delta_saida) * this->taxa_aprendizado));
+        this->out_w2 = (this->out_w2 + ((this->h2 * delta_saida) * this->taxa_aprendizado));
+        this->out_w3 = (this->out_w3 + ((this->h3 * delta_saida) * this->taxa_aprendizado));
+        this->out_bias = (this->out_bias + (delta_saida * this->taxa_aprendizado));
+        auto delta_h1 = ((delta_saida * antigo_out_w1) * derivada_sigmoid(this->h1));
+        auto delta_h2 = ((delta_saida * antigo_out_w2) * derivada_sigmoid(this->h2));
+        auto delta_h3 = ((delta_saida * antigo_out_w3) * derivada_sigmoid(this->h3));
+        this->h1_w1 = (this->h1_w1 + ((x1 * delta_h1) * this->taxa_aprendizado));
+        this->h1_w2 = (this->h1_w2 + ((x2 * delta_h1) * this->taxa_aprendizado));
+        this->h1_bias = (this->h1_bias + (delta_h1 * this->taxa_aprendizado));
+        this->h2_w1 = (this->h2_w1 + ((x1 * delta_h2) * this->taxa_aprendizado));
+        this->h2_w2 = (this->h2_w2 + ((x2 * delta_h2) * this->taxa_aprendizado));
+        this->h2_bias = (this->h2_bias + (delta_h2 * this->taxa_aprendizado));
+        this->h3_w1 = (this->h3_w1 + ((x1 * delta_h3) * this->taxa_aprendizado));
+        this->h3_w2 = (this->h3_w2 + ((x2 * delta_h3) * this->taxa_aprendizado));
+        this->h3_bias = (this->h3_bias + (delta_h3 * this->taxa_aprendizado));
+    }
+    void treinar() {
+        auto epoca = 0;
+        while ((epoca < 20000))
+        {
+            this->treinar_amostra(0, 0, 0);
+            this->treinar_amostra(0, 1, 1);
+            this->treinar_amostra(1, 0, 1);
+            this->treinar_amostra(1, 1, 0);
+            epoca = (epoca + 1);
+        }
+    }
+    void testar() {
+        std::cout << "==== Teste 4: rede neural XOR com backpropagation ====" << std::endl;
+        std::cout << "Input: [0, 0], Predicted Output:" << " " << this->feedforward(0, 0) << std::endl;
+        std::cout << "Input: [0, 1], Predicted Output:" << " " << this->feedforward(0, 1) << std::endl;
+        std::cout << "Input: [1, 0], Predicted Output:" << " " << this->feedforward(1, 0) << std::endl;
+        std::cout << "Input: [1, 1], Predicted Output:" << " " << this->feedforward(1, 1) << std::endl;
+    }
+};
+
 int main() {
     #ifdef _WIN32
         WSADATA wsa;
         WSAStartup(MAKEWORD(2,2), &wsa);
     #endif
 
-    std::cout << "Input: [0, 0], Predicted Output: 0.0089" << std::endl;
-    std::cout << "Input: [0, 1], Predicted Output: 0.9769" << std::endl;
-    std::cout << "Input: [1, 0], Predicted Output: 0.9758" << std::endl;
-    std::cout << "Input: [1, 1], Predicted Output: 0.0291" << std::endl;
+    auto rede = std::make_shared<RedeNeuralXOR>();
+    rede->treinar();
+    rede->testar();
 
     return 0;
 }

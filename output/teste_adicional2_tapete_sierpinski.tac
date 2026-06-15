@@ -41,6 +41,7 @@ goto WHILE_1
 ENDWHILE_2:
 return tela
 endfunc preencher
+print "==== Teste adicional 2: tapete de Sierpinski ===="
 tamanho = 9
 t16 = matrix(tamanho, tamanho, " ")
 tela = t16

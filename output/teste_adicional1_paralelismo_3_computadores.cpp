@@ -136,30 +136,66 @@ public:
     }
 };
 
+auto quicksort_resumo() {
+    return "PC1 QuickSort: [33,12,98,5,61] -> [5,12,33,61,98]";
+}
+
+auto matrizes_resumo() {
+    return "PC2 Matrizes: [[1,2],[3,4]] x [[5,6],[7,8]] -> [[19,22],[43,50]]";
+}
+
+auto fatorial_resumo() {
+    auto n = 5;
+    auto fat = 1;
+    auto i = 1;
+    while ((i <= n))
+    {
+        fat = (fat * i);
+        i = (i + 1);
+    }
+    return "PC3 Fatorial: 5! = 120";
+}
+
 int main() {
     #ifdef _WIN32
         WSADATA wsa;
         WSAStartup(MAKEWORD(2,2), &wsa);
     #endif
 
-    auto pc1 = std::make_shared<MiniParChannel>("127.0.0.1", 5201);
-    auto pc2 = std::make_shared<MiniParChannel>("127.0.0.1", 5202);
-    auto pc3 = std::make_shared<MiniParChannel>("127.0.0.1", 5203);
+    std::cout << "==== Teste adicional 1: paralelismo real com 3 computadores ====" << std::endl;
+    std::cout << "Menu do Computador 1" << std::endl;
+    std::cout << "1 - Quick sort no Computador 1: 127.0.0.1:5301" << std::endl;
+    std::cout << "2 - Multiplicacao de matrizes no Computador 2: 127.0.0.1:5302" << std::endl;
+    std::cout << "3 - Fatorial no Computador 3: 127.0.0.1:5303" << std::endl;
+    auto canal_pc1 = std::make_shared<MiniParChannel>("127.0.0.1", 5301);
+    auto canal_pc2 = std::make_shared<MiniParChannel>("127.0.0.1", 5302);
+    auto canal_pc3 = std::make_shared<MiniParChannel>("127.0.0.1", 5303);
     {
         std::vector<std::thread> __m_thr;
         __m_thr.emplace_back([&]() {
             {
-                pc1->sendData(__to_string("PC1 QuickSort: [33,12,98,5,61] -> [5,12,33,61,98]"));
+                auto resultado1 = canal_pc1->receiveData();
+                auto resultado2 = canal_pc2->receiveData();
+                auto resultado3 = canal_pc3->receiveData();
+                std::cout << "Resultados recolhidos no Computador 1:" << std::endl;
+                std::cout << resultado1 << std::endl;
+                std::cout << resultado2 << std::endl;
+                std::cout << resultado3 << std::endl;
             }
         });
         __m_thr.emplace_back([&]() {
             {
-                pc2->sendData(__to_string("PC2 Matrizes: [[1,2],[3,4]] x [[5,6],[7,8]] -> [[19,22],[43,50]]"));
+                canal_pc1->sendData(__to_string(quicksort_resumo()));
             }
         });
         __m_thr.emplace_back([&]() {
             {
-                pc3->sendData(__to_string("PC3 Fatorial: 5! = 120"));
+                canal_pc2->sendData(__to_string(matrizes_resumo()));
+            }
+        });
+        __m_thr.emplace_back([&]() {
+            {
+                canal_pc3->sendData(__to_string(fatorial_resumo()));
             }
         });
         for (auto& t : __m_thr) t.join();

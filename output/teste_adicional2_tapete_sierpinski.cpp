@@ -166,6 +166,7 @@ int main() {
         WSAStartup(MAKEWORD(2,2), &wsa);
     #endif
 
+    std::cout << "==== Teste adicional 2: tapete de Sierpinski ====" << std::endl;
     auto tamanho = 9;
     auto tela = __make_matrix(tamanho, tamanho, " ");
     tela = preencher(tela, 0, 0, tamanho);

@@ -136,25 +136,178 @@ public:
     }
 };
 
+auto relu(auto x) {
+    if ((x > 0))
+    {
+        return x;
+    }
+    return 0.0;
+}
+
+auto sigmoid(auto x) {
+    return (1 / (1 + std::exp((0 - x))));
+}
+
+auto peso_entrada_oculta(auto produto, auto neuronio) {
+    auto base = (((produto + 1) * (neuronio + 2)) % 7);
+    return ((base + 1) / 20.0);
+}
+
+auto bias_oculto(auto neuronio) {
+    return ((neuronio % 3) / 20.0);
+}
+
+auto peso_oculta_saida(auto neuronio, auto produto) {
+    auto base = (((neuronio + 3) * (produto + 1)) % 5);
+    return ((base + 1) / 25.0);
+}
+
+auto bias_saida(auto produto, auto historico) {
+    if ((historico[produto] == 1))
+    {
+        return (-0.25);
+    }
+    return (-0.10);
+}
+
+auto nome_produto(auto indice) {
+    if ((indice == 0))
+    {
+        return "Smartphone";
+    }
+    if ((indice == 1))
+    {
+        return "Laptop";
+    }
+    if ((indice == 2))
+    {
+        return "Tablet";
+    }
+    if ((indice == 3))
+    {
+        return "Fones de ouvido";
+    }
+    if ((indice == 4))
+    {
+        return "Camisa";
+    }
+    if ((indice == 5))
+    {
+        return "Jeans";
+    }
+    if ((indice == 6))
+    {
+        return "Jaqueta";
+    }
+    if ((indice == 7))
+    {
+        return "Sapatos";
+    }
+    if ((indice == 8))
+    {
+        return "Geladeira";
+    }
+    if ((indice == 9))
+    {
+        return "Micro-ondas";
+    }
+    if ((indice == 10))
+    {
+        return "Maquina de lavar";
+    }
+    if ((indice == 11))
+    {
+        return "Ar condicionado";
+    }
+    if ((indice == 12))
+    {
+        return "Ficcao";
+    }
+    if ((indice == 13))
+    {
+        return "Nao-ficcao";
+    }
+    if ((indice == 14))
+    {
+        return "Ficcao cientifica";
+    }
+    return "Fantasia";
+}
+
+class Usuario {
+public:
+    auto codificar_historico() {
+        return std::vector<double>{1, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0};
+    }
+};
+
+class RedeNeuralRecomendacao {
+public:
+    decltype(16) input_size = 16;
+    decltype(10) hidden_size = 10;
+    decltype(16) output_size = 16;
+    auto forward(auto historico) {
+        auto ocultas = std::vector<double>{0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+        auto saidas = std::vector<double>{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+        auto h = 0;
+        while ((h < this->hidden_size))
+        {
+            auto soma_oculta = 0.0;
+            auto entrada = 0;
+            while ((entrada < this->input_size))
+            {
+                soma_oculta = (soma_oculta + (historico[entrada] * peso_entrada_oculta(entrada, h)));
+                entrada = (entrada + 1);
+            }
+            ocultas[h] = relu((soma_oculta + bias_oculto(h)));
+            h = (h + 1);
+        }
+        auto produto = 0;
+        while ((produto < this->output_size))
+        {
+            auto soma_saida = 0.0;
+            auto neuronio = 0;
+            while ((neuronio < this->hidden_size))
+            {
+                soma_saida = (soma_saida + (ocultas[neuronio] * peso_oculta_saida(neuronio, produto)));
+                neuronio = (neuronio + 1);
+            }
+            saidas[produto] = sigmoid((soma_saida + bias_saida(produto, historico)));
+            produto = (produto + 1);
+        }
+        return saidas;
+    }
+};
+
+class Recomendador {
+public:
+    void recomendar() {
+        auto usuario = std::make_shared<Usuario>();
+        auto rede = std::make_shared<RedeNeuralRecomendacao>();
+        auto historico = usuario->codificar_historico();
+        auto probabilidades = rede->forward(historico);
+        std::cout << "==== Teste 5: recomendacao e-commerce com rede neural ====" << std::endl;
+        std::cout << "Produtos recomendados para voce:" << std::endl;
+        auto produto = 0;
+        while ((produto < 16))
+        {
+            if (((historico[produto] == 0) && (probabilidades[produto] > 0.55)))
+            {
+                std::cout << nome_produto(produto) << " " << "probabilidade:" << " " << probabilidades[produto] << std::endl;
+            }
+            produto = (produto + 1);
+        }
+    }
+};
+
 int main() {
     #ifdef _WIN32
         WSADATA wsa;
         WSAStartup(MAKEWORD(2,2), &wsa);
     #endif
 
-    std::cout << "Produtos recomendados para você:" << std::endl;
-    std::cout << "Laptop" << std::endl;
-    std::cout << "Tablet" << std::endl;
-    std::cout << "Fones de ouvido" << std::endl;
-    std::cout << "Camisa" << std::endl;
-    std::cout << "Jaqueta" << std::endl;
-    std::cout << "Sapatos" << std::endl;
-    std::cout << "Geladeira" << std::endl;
-    std::cout << "Máquina de lavar" << std::endl;
-    std::cout << "Ar condicionado" << std::endl;
-    std::cout << "Não-ficção" << std::endl;
-    std::cout << "Ficção científica" << std::endl;
-    std::cout << "Fantasia" << std::endl;
+    auto recomendador = std::make_shared<Recomendador>();
+    recomendador->recomendar();
 
     return 0;
 }

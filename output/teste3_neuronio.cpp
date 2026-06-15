@@ -147,48 +147,38 @@ public:
     decltype(999) erro = 999;
     decltype(0) iteracao = 0;
     auto ativacao(auto soma) {
-        if ((soma >= 0))
+        if ((soma > 0))
         {
             return 1;
         }
         return 0;
     }
     void treinar() {
-        std::cout << "Entrada: 1 | Saída desejada: 0" << std::endl;
+        std::cout << "==== Teste 3: neuronio simples com classes e objetos ====" << std::endl;
+        std::cout << "Entrada:" << " " << this->input_val << " " << "Saida desejada:" << " " << this->output_desejado << std::endl;
         while ((this->erro != 0))
         {
             this->iteracao = (this->iteracao + 1);
             auto soma = ((this->input_val * this->peso) + (this->bias * this->peso_bias));
             auto saida = this->ativacao(soma);
             this->erro = (this->output_desejado - saida);
-            if ((this->iteracao == 1))
-            {
-                std::cout << "#### Iteração: 1" << std::endl;
-                std::cout << "Peso: 0.5000" << std::endl;
-                std::cout << "Saída: 1" << std::endl;
-                std::cout << "Erro: -1" << std::endl;
-                std::cout << "Peso do bias: 0.5000" << std::endl;
-            }
-            if ((this->iteracao == 50))
-            {
-                std::cout << "#### Iteração: 50" << std::endl;
-                std::cout << "Peso: 0.0100" << std::endl;
-                std::cout << "Saída: 1" << std::endl;
-                std::cout << "Erro: -1" << std::endl;
-                std::cout << "Peso do bias: 0.0100" << std::endl;
-            }
+            std::cout << "Iteracao:" << " " << this->iteracao << std::endl;
+            std::cout << "Soma ponderada:" << " " << soma << std::endl;
+            std::cout << "Saida:" << " " << saida << std::endl;
+            std::cout << "Erro:" << " " << this->erro << std::endl;
+            std::cout << "Peso entrada:" << " " << this->peso << std::endl;
+            std::cout << "Peso bias:" << " " << this->peso_bias << std::endl;
             if ((this->erro != 0))
             {
                 this->peso = (this->peso + ((this->taxa_aprendizado * this->input_val) * this->erro));
                 this->peso_bias = (this->peso_bias + ((this->taxa_aprendizado * this->bias) * this->erro));
             }
         }
-        std::cout << "#### Iteração: 51" << std::endl;
-        std::cout << "Peso: -0.0000" << std::endl;
-        std::cout << "Saída: 0" << std::endl;
-        std::cout << "Erro: 0" << std::endl;
-        std::cout << "✅ Parabéns! O neurônio aprendeu." << std::endl;
-        std::cout << "Valor desejado: 0" << std::endl;
+        std::cout << "Neuronio aprendeu dinamicamente." << std::endl;
+        std::cout << "Iteracoes totais:" << " " << this->iteracao << std::endl;
+        std::cout << "Peso final:" << " " << this->peso << std::endl;
+        std::cout << "Peso bias final:" << " " << this->peso_bias << std::endl;
+        std::cout << "Valor desejado:" << " " << this->output_desejado << std::endl;
     }
 };
 
