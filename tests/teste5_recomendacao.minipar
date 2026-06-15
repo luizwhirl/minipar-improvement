@@ -79,10 +79,17 @@ func nome_produto(indice) {
     return "Fantasia";
 }
 
-class Usuario {
-    func codificar_historico() {
-        return [1, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0];
+func ler_historico_compras() {
+    var historico = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    print("==== Teste 5: recomendacao e-commerce com rede neural ====");
+    print("Informe o historico de compras (1 = comprou, 0 = nao comprou):");
+    var i = 0;
+    while (i < 16) {
+        print(nome_produto(i), "- comprou? (0/1):");
+        historico[i] = to_number(input(""));
+        i = i + 1;
     }
+    return historico;
 }
 
 class RedeNeuralRecomendacao {
@@ -127,13 +134,10 @@ class RedeNeuralRecomendacao {
 }
 
 class Recomendador {
-    func recomendar() {
-        var usuario = new Usuario();
+    func recomendar(historico) {
         var rede = new RedeNeuralRecomendacao();
-        var historico = usuario.codificar_historico();
         var probabilidades = rede.forward(historico);
 
-        print("==== Teste 5: recomendacao e-commerce com rede neural ====");
         print("Produtos recomendados para voce:");
 
         var produto = 0;
@@ -147,6 +151,7 @@ class Recomendador {
 }
 
 seq {
+    var historico = ler_historico_compras();
     var recomendador = new Recomendador();
-    recomendador.recomendar();
+    recomendador.recomendar(historico);
 }

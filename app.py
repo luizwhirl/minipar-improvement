@@ -82,12 +82,14 @@ def session_join():
 @app.route('/api/session/create', methods=['POST'])
 def session_create():
     filename = request.json.get('filename')
-    spec = get_spec_summary(filename)
-    if not spec or not spec.get('multi_computer'):
-        return jsonify({"success": False, "error": "Teste não requer multi-computador"}), 400
-    from test_orchestrator import TEST_SPECS
-    full_spec = TEST_SPECS.get(filename, spec)
-    session = create_session(filename, full_spec)
+    path = os.path.join(TESTS_DIR, filename)
+    if not os.path.exists(path):
+        return jsonify({"success": False, "error": "Arquivo não encontrado"}), 404
+    from program_analyzer import get_program_spec
+    spec = get_program_spec(path)
+    if not spec.get('multi_computer'):
+        return jsonify({"success": False, "error": "Programa não requer multi-terminal"}), 400
+    session = create_session(path, spec)
     return jsonify({"success": True, "session": session})
 
 

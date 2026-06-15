@@ -38,11 +38,12 @@ class Quicksort {
 }
 
 seq {
-    print("==== Ordenação com Quicksort ====");
-    print("Insira os elementos do vetor separados por espaço:");
-    print("10 -3 -40 80 70 -100");
+    print("==== Ordenacao com Quicksort ====");
+    print("Insira os elementos do vetor separados por espaco:");
+    var entrada = input("");
+    print("Entrada recebida:", entrada);
     var algoritmo = new Quicksort();
-    print("Vetor original: [10, -3, -40, 80, 70, -100]");
+    print("Vetor original:", algoritmo.array);
     var vetor_ordenado = algoritmo.ordenar();
     print("Vetor ordenado:", vetor_ordenado);
 }

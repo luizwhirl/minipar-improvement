@@ -209,8 +209,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 let info = "Arquivo carregado. Clique em 'Compile & Run'.";
                 if (spec) {
                     const tags = [];
-                    if (spec.requires_input) tags.push("requer entrada do usuário");
-                    if (spec.multi_computer) tags.push(`${spec.multi_computer.count} computadores`);
+                    if (spec.requires_input) tags.push(`${spec.input_count || spec.inputs.length} input(s)`);
+                    if (spec.multi_computer) tags.push(`${spec.multi_computer.count} terminais`);
                     if (tags.length) info += `\n[${tags.join(" | ")}]`;
                 }
                 terminalOutput.textContent = info;
@@ -221,20 +221,23 @@ document.addEventListener("DOMContentLoaded", () => {
     async function collectInputs(spec) {
         if (!spec || !spec.requires_input || !spec.inputs.length) return [];
 
-        let msg = `${spec.titulo}\n\n${spec.descricao}\n\nEste teste exige entrada do teclado:\n\n`;
+        let msg =
+            `${spec.titulo}\n\n` +
+            `Este programa possui ${spec.input_count || spec.inputs.length} entrada(s) input().\n` +
+            `Informe os valores que serão enviados ao programa:\n\n`;
         spec.inputs.forEach((inp, i) => {
-            msg += `[${i + 1}] ${inp.descricao}\n    Exemplo: ${inp.exemplo}\n\n`;
+            const desc = inp.descricao || inp.prompt || `Entrada ${i + 1}`;
+            msg += `[${i + 1}] ${desc}\n`;
         });
         alert(msg);
 
         const collected = [];
-        for (const inp of spec.inputs) {
-            const valor = prompt(
-                `${inp.descricao}\n(Exemplo do documento: ${inp.exemplo})\n\nDigite o valor:`,
-                inp.exemplo
-            );
+        for (let i = 0; i < spec.inputs.length; i++) {
+            const inp = spec.inputs[i];
+            const desc = inp.descricao || inp.prompt || `Entrada ${i + 1}`;
+            const valor = prompt(`${desc}\n\nDigite o valor:`);
             if (valor === null) return null;
-            collected.push(valor.trim() || inp.exemplo);
+            collected.push(valor.trim());
         }
         return collected;
     }

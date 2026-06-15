@@ -101,6 +101,33 @@ class CppCodeGenerator:
             return self._has_value_return(node.body)
         return False
 
+    def _uses_float_return(self, node: Optional[ASTNode]) -> bool:
+        """Detecta aritmética de ponto flutuante no corpo da função."""
+        if node is None:
+            return False
+        if isinstance(node, BinaryExpr):
+            if node.op == "/":
+                return True
+            return self._uses_float_return(node.left) or self._uses_float_return(node.right)
+        if isinstance(node, NumberExpr):
+            return "." in node.value
+        if isinstance(node, (SeqBlock, ParBlock)):
+            return any(self._uses_float_return(stmt) for stmt in node.statements)
+        if isinstance(node, IfStmt):
+            return self._uses_float_return(node.then_branch) or self._uses_float_return(node.else_branch)
+        if isinstance(node, (WhileStmt, DoWhileStmt, ForStmt)):
+            return self._uses_float_return(node.body)
+        if isinstance(node, ReturnStmt):
+            return self._uses_float_return(node.value)
+        return False
+
+    def _return_type(self, body: Optional[ASTNode]) -> str:
+        if not self._has_value_return(body):
+            return "void"
+        if self._uses_float_return(body):
+            return "double"
+        return "auto"
+
     def _translate_statement(self, node: Optional[ASTNode], indent: str = "") -> str:
         if node is None: return ""
         if isinstance(node, VarDecl):
@@ -208,7 +235,7 @@ class CppCodeGenerator:
                         cpp_code += f"    double {attr.name} = 0;\n"
                 for method in node.methods:
                     params = ", ".join(f"auto {p}" for p in method.params)
-                    ret = "auto" if self._has_value_return(method.body) else "void"
+                    ret = self._return_type(method.body)
                     cpp_code += f"    {ret} {method.name}({params}) {{\n"
                     if isinstance(method.body, SeqBlock):
                         for stmt in method.body.statements: cpp_code += self._translate_statement(stmt, "        ")
@@ -217,7 +244,7 @@ class CppCodeGenerator:
                 cpp_code += "};\n\n"
             elif isinstance(node, FuncDecl):
                 params = ", ".join(f"auto {p}" for p in node.params)
-                ret = "auto" if self._has_value_return(node.body) else "void"
+                ret = self._return_type(node.body)
                 cpp_code += f"{ret} {node.name}({params}) {{\n"
                 if isinstance(node.body, SeqBlock):
                     for stmt in node.body.statements: cpp_code += self._translate_statement(stmt, "    ")
