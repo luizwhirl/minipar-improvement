@@ -1,10 +1,10 @@
-# Gramática Formal BNF — Linguagem MiniPar 2026.1
+# Gramática Formal BNF — Linguagem MiniPar 2026.2
 
-**Projeto:** MiniPar-Improvement — Compilador da Linguagem MiniPar 2026.1 Orientada a Objetos  
-**Autores:** Emanuele Vitória de Jesus Lima · Jose Lucas de Oliveira Quintela · Luiz Miguel de Melo Bomfim  
+**Projeto:** MiniPar-Improvement — Compilador da Linguagem MiniPar 2026.2 Orientada a Objetos  
+**Autores:** Laura Mainero - Yuri - Júlia Azevedo - João Felipe Brandão Jatobá 
 **Instituição:** Universidade Federal de Alagoas — Instituto de Computação · Ciência da Computação  
 **Disciplina:** Compiladores — Prof. Arturo Hernandez Dominguez  
-**Repositório:** https://github.com/luizwhirl/minipar-improvement  
+**Repositório:** https://github.com/maineros/minipar-improvement-2026.2
 
 ---
 
@@ -22,7 +22,7 @@
 3. [Programa](#3-programa)
 4. [Declarações](#4-declarações)
 5. [Comandos](#5-comandos)
-6. [Blocos Sequencial e Paralelo](#6-blocos-sequencial-e-paralelo)
+6. [Blocos e Paralelismo (Seq, Par, Fork e Join)](#6-blocos-e-paralelismo-seq-par-fork-e-join)
 7. [Estruturas de Controle](#7-estruturas-de-controle)
 8. [Orientação a Objetos](#8-orientação-a-objetos)
 9. [Funções](#9-funções)
@@ -62,7 +62,7 @@ Comentários iniciados por `#` são descartados pelo lexer antes da geração de
 class  extends  new  func  var
 if  else  while  do  for  in
 break  continue  return
-seq  par  this
+seq  par  fork  join  this
 c_channel  send  receive  input  print  matrix
 true  false
 number  int  string  bool  void  list  dict
@@ -197,6 +197,7 @@ class Cachorro extends Animal {
             | <comando_for>
             | <comando_print>
             | <comando_send>
+            | <comando_join>
             | <comando_return>
             | <comando_break>
             | <comando_continue>
@@ -255,7 +256,7 @@ print("Valor:", x, "e", y);
 
 ---
 
-## 6. Blocos Sequencial e Paralelo
+## 6. Blocos e Paralelismo (Seq, Par, Fork e Join)
 
 ### 6.1 Bloco Sequencial (SEQ)
 
@@ -271,7 +272,7 @@ O `seq` é opcional: blocos com chaves `{ }` são tratados como sequenciais por 
 ### 6.2 Bloco Paralelo (PAR)
 
 Cada comando interno é executado como uma `std::thread` independente em C++.  
-As threads são sincronizadas por `join()` ao final do bloco.
+As threads são sincronizadas por um join implícito ao final do bloco.
 
 ```bnf
 <bloco_par> ::= "par" "{" { <comando> } "}"
@@ -285,6 +286,31 @@ par {
     seq { print("Thread B"); }
     seq { print("Thread C"); }
 }
+```
+
+### 6.3 Criação Dinâmica de Subtarefas (Fork e Join)
+
+Para dividir tarefas de forma recursiva ou dinâmica, a linguagem disponibiliza `fork` e `join`. O `fork` dispara uma chamada de função (ou método) em uma nova thread e retorna um manipulador (handle). O `join` recebe esse manipulador para aguardar o término e coletar o resultado.
+
+```bnf
+<expressao_fork> ::= "fork" ( <chamada_funcao> | <chamada_metodo> )
+<comando_join>   ::= "join" "(" <expressao> ")" ";"
+<expressao_join> ::= "join" "(" <expressao> ")"
+```
+
+**Exemplos:**
+
+```minipar
+# Disparando tarefas recursivas/independentes
+var t1 = fork calcular_parte(0, 50);
+var t2 = fork calcular_parte(51, 100);
+
+# O programa continua sua execução aqui
+
+# Aguardando e coletando resultados
+var res1 = join(t1);
+var res2 = join(t2);
+var total = res1 + res2;
 ```
 
 ---
@@ -529,6 +555,8 @@ As expressões seguem a hierarquia de precedência implementada no parser (da me
                        | <IDENTIFIER> [ "(" [ <lista_argumentos> ] ")" ]
                        | "this"
                        | <expressao_new>
+                       | <expressao_fork>
+                       | <expressao_join>
                        | <expressao_c_channel>
                        | <expressao_receive>
                        | <expressao_input>
@@ -820,6 +848,7 @@ A seguir a gramática completa em formato BNF, em ordem de definição:
             | <comando_for>
             | <comando_print>
             | <comando_send>
+            | <comando_join>
             | <comando_return>
             | <comando_break>
             | <comando_continue>
@@ -836,14 +865,18 @@ A seguir a gramática completa em formato BNF, em ordem de definição:
 <comando_return>    ::= "return" [ <expressao> ] ";"
 <comando_break>     ::= "break" ";"
 <comando_continue>  ::= "continue" ";"
+<comando_join>      ::= "join" "(" <expressao> ")" ";"
 
 
-(* ─── BLOCOS ─── *)
+(* ─── BLOCOS E PARALELISMO ─── *)
 
 <bloco_seq> ::= "seq" "{" { <comando> } "}"
               | "{" { <comando> } "}"
 
 <bloco_par> ::= "par" "{" { <comando> } "}"
+
+<expressao_fork> ::= "fork" ( <chamada_funcao> | <chamada_metodo> )
+<expressao_join> ::= "join" "(" <expressao> ")"
 
 
 (* ─── ESTRUTURAS DE CONTROLE ─── *)
@@ -932,6 +965,8 @@ A seguir a gramática completa em formato BNF, em ordem de definição:
                        | <IDENTIFIER> [ "(" [ <lista_argumentos> ] ")" ]
                        | "this"
                        | <expressao_new>
+                       | <expressao_fork>
+                       | <expressao_join>
                        | <expressao_c_channel>
                        | <expressao_receive>
                        | <expressao_input>
@@ -964,10 +999,9 @@ A seguir a gramática completa em formato BNF, em ordem de definição:
 <comentario> ::= "#" { <qualquer_char> } <nova_linha>
 (* Descartados pelo lexer — não aparecem na AST *)
 ```
-
 ---
 
-## Notas de Implementação
+## Notas de Implementação (2025) ATUALIZAR
 
 ### Inferência de Tipos
 
@@ -1028,5 +1062,3 @@ O analisador semântico (`src/semantic.py`) usa inferência simples de tipos com
 | `input(p)` | `input(p)` (helper C++) |
 
 ---
-
-*Gramática gerada em 15 de junho de 2026 — MiniPar-Improvement v2026.1*
