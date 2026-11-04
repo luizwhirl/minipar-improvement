@@ -1,7 +1,7 @@
 # Gramática Formal BNF — Linguagem MiniPar 2026.2
 
 **Projeto:** MiniPar-Improvement — Compilador da Linguagem MiniPar 2026.2 Orientada a Objetos  
-**Autores:** Laura Mainero - Yuri - Júlia Azevedo - João Felipe Brandão Jatobá 
+**Autores:** Laura Mainero - Yuri Barbosa - Júlia Azevedo - João Felipe Brandão Jatobá 
 **Instituição:** Universidade Federal de Alagoas — Instituto de Computação · Ciência da Computação  
 **Disciplina:** Compiladores — Prof. Arturo Hernandez Dominguez  
 **Repositório:** https://github.com/maineros/minipar-improvement-2026.2
