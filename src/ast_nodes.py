@@ -209,3 +209,13 @@ class IndexAssign(ASTNode):
 class Program(ASTNode):
     statements: List[ASTNode] = field(default_factory=list)
     line: int = 1
+
+@dataclass
+class ForkExpr(ASTNode):
+    function_call: ASTNode
+    line: int = 1
+
+@dataclass
+class JoinExpr(ASTNode):
+    task: ASTNode
+    line: int = 1

@@ -7,7 +7,7 @@ from ast_nodes import (
     BinaryExpr, UnaryExpr, NumberExpr, StringExpr, BoolExpr, IdentifierExpr, IfStmt, WhileStmt,
     DoWhileStmt, ForStmt, BreakStmt, ContinueStmt, InputExpr,
     ClassDecl, FuncDecl, ReturnStmt, MethodCall, FuncCallExpr, PropertyAccess, PropertyAssign, NewExpr, ThisExpr,
-    CChannelExpr, SendStmt, ReceiveExpr, ListLiteral, MatrixCreateExpr, IndexExpr, IndexAssign
+    CChannelExpr, SendStmt, ReceiveExpr, ListLiteral, MatrixCreateExpr, IndexExpr, IndexAssign, ForkExpr, JoinExpr
 )
 
 class Parser:
@@ -227,11 +227,11 @@ class Parser:
         if self._match(TokenType.DO): return self._parse_do_while_stmt()
         if self._match(TokenType.FOR): return self._parse_for_stmt()
 
-        if self._peek().type in (TokenType.IDENTIFIER, TokenType.THIS, TokenType.NEW, TokenType.RECEIVE, TokenType.INPUT, TokenType.C_CHANNEL, TokenType.MATRIX, TokenType.LBRACKET):
+        if self._peek().type in (TokenType.IDENTIFIER, TokenType.THIS, TokenType.NEW, TokenType.RECEIVE, TokenType.INPUT, TokenType.C_CHANNEL, TokenType.MATRIX, TokenType.LBRACKET, TokenType.FORK, TokenType.JOIN):
             expr = self._parse_expression()
             if self._match(TokenType.ASSIGN):
                 return self._parse_assignment_tail(expr)
-            elif isinstance(expr, (MethodCall, FuncCallExpr)):
+            elif isinstance(expr, (MethodCall, FuncCallExpr, JoinExpr, ForkExpr)):
                 self._consume(TokenType.SEMICOLON, "Esperado ';'")
                 return expr
             sys.exit(print(f"[ERRO] Linha {expr.line}: Instrucao ou expressao isolada invalida", file=sys.stderr) or 1)
@@ -365,6 +365,17 @@ class Parser:
         elif self._match(TokenType.LPAREN):
             node = self._parse_expression()
             self._consume(TokenType.RPAREN, "Esperado ')'")
+        elif self._match(TokenType.FORK):
+            line = tok.line
+            call_expr = self._parse_expression()
+            node = ForkExpr(function_call=call_expr, line=line)
+            
+        elif self._match(TokenType.JOIN):
+            line = tok.line
+            self._consume(TokenType.LPAREN, "Esperado '(' apos join")
+            task_expr = self._parse_expression()
+            self._consume(TokenType.RPAREN, "Esperado ')'")
+            node = JoinExpr(task=task_expr, line=line)
         else:
             sys.exit(print(f"[ERRO SINTATICO] Linha {tok.line}: Expressao esperada", file=sys.stderr) or 1)
 
