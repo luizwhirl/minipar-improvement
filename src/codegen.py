@@ -224,7 +224,7 @@ class CppCodeGenerator:
             return f"{self._translate_expression(node.target)} = {self._translate_expression(node.value)}"
         return self._translate_expression(node)
 
-    def generate(self, program: Program, output_name: str) -> bool:
+    def generate(self, program: Program, output_name: str, output_dir: str = "output") -> bool:
         cpp_code = _CPP_HEADER
         
         for node in program.statements:
@@ -262,9 +262,10 @@ class CppCodeGenerator:
                 else: cpp_code += self._translate_statement(node, "    ")
         cpp_code += "\n    return 0;\n}\n"
 
-        os.makedirs("output", exist_ok=True)
-        cpp_path = os.path.join("output", f"{output_name}.cpp")
-        exe_path = os.path.join("output", f"{output_name}.exe")
+        os.makedirs(output_dir, exist_ok=True)
+        cpp_path = os.path.join(output_dir, f"{output_name}.cpp")
+        exe_ext = ".exe" if sys.platform == "win32" else ""
+        exe_path = os.path.join(output_dir, f"{output_name}{exe_ext}")
 
         with open(cpp_path, "w", encoding="utf-8") as f: f.write(cpp_code)
         

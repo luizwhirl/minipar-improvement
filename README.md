@@ -94,7 +94,32 @@ python main.py tests/teste3_neuronio.minipar
 
 O nome do arquivo de saída é opcional. Por padrão, será utilizado o mesmo nome do arquivo `.minipar`.
 
-Os arquivos gerados (`.cpp`, `.tac` e executáveis) serão armazenados na pasta `output/`.
+Cada compilação cria uma pasta exclusiva em `output/runs/run-.../`, contendo
+os arquivos `.cpp`, `.tac` e o executável. O terminal informa essa pasta na linha
+`[OUTPUT]`. Assim, execuções simultâneas do mesmo programa no terminal e na IDE
+Web mantêm seus próprios arquivos. Na IDE, o código-fonte enviado também fica
+na subpasta `source/` dessa execução.
+
+O menu do terminal e a IDE executam o binário da respectiva pasta. Na CLI direta,
+o comando acima compila; para executar, use o caminho do executável informado
+em `[SUCESSO] Executavel:`. As pastas são mantidas para inspeção posterior.
+
+Para ferramentas que precisam escolher a pasta explicitamente:
+
+```bash
+python main.py tests/teste3_neuronio.minipar --output-dir output/minha_execucao
+```
+
+Ao usar `--output-dir`, escolha uma pasta diferente para cada execução simultânea.
+
+Para validar isolamento de arquivos e os limites entre sessão HTTP e terminal:
+
+```bash
+python -m unittest discover -s tests -p "test_*.py" -v
+```
+
+O teste de isolamento exige `g++` no PATH e compila simultaneamente dois pedidos
+Web e uma execução CLI com o mesmo nome de arquivo e conteúdos diferentes.
 
 ---
 

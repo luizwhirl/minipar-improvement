@@ -4,6 +4,7 @@ import subprocess
 import glob
 
 from main import compile_file
+from run_artifacts import create_run_dir, executable_path
 from program_analyzer import get_program_spec
 from test_orchestrator import (
     prepare_test_execution,
@@ -19,10 +20,9 @@ from test_orchestrator import (
 )
 
 
-def executar_binario(output_name: str, interactive: bool = False) -> str:
+def executar_binario(output_name: str, interactive: bool = False, output_dir: str = "output") -> str:
     """Executa o binário. Modo interativo quando o programa usa input()."""
-    exe_ext = ".exe" if sys.platform == "win32" else ""
-    exe_path = os.path.join("output", f"{output_name}{exe_ext}")
+    exe_path = executable_path(output_dir, output_name)
 
     if not os.path.exists(exe_path):
         print(f"[ERRO] Executavel {exe_path} nao encontrado apos compilacao.")
@@ -80,17 +80,17 @@ def rodar_teste(test_path: str) -> None:
         return
 
     if is_joiner:
-        # Participante já acompanhou via run_joiner_progress_monitor — não reexecuta
         print(f"\n  Terminal participante: {get_terminal_id()}\n")
         return
 
     set_session_phase("compiling", "Compilando...", percent=55)
     append_session_log("Compilação iniciada.")
-    success = compile_file(test_path, base_name)
+    output_dir = create_run_dir()
+    success = compile_file(test_path, base_name, output_dir)
     if success:
         set_session_phase("compiling", "Compilação concluída.", percent=80)
         append_session_log("Compilação concluída.")
-        output = executar_binario(base_name, interactive=interactive)
+        output = executar_binario(base_name, interactive=interactive, output_dir=output_dir)
         finalize_test_execution(test_path, output)
     else:
         append_session_log("Erro na compilação.")

@@ -228,9 +228,9 @@ class TACGenerator:
             self._stmt(stmt)
         return "\n".join(self.lines) + ("\n" if self.lines else "")
 
-    def generate(self, program: Program, output_name: str) -> str:
-        os.makedirs("output", exist_ok=True)
-        tac_path = os.path.join("output", f"{output_name}.tac")
+    def generate(self, program: Program, output_name: str, output_dir: str = "output") -> str:
+        os.makedirs(output_dir, exist_ok=True)
+        tac_path = os.path.join(output_dir, f"{output_name}.tac")
         text = self.generate_text(program)
         with open(tac_path, "w", encoding="utf-8") as f:
             f.write(text)

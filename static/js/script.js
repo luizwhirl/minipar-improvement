@@ -28,17 +28,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const tabs             = document.querySelectorAll(".tab");
 
     let currentTestSpec = null;
-    let progressPollTimer = null;
-    let lastLogCount = 0;
-    let isSessionJoiner = false;
-
-    function stopProgressPoll() {
-        if (progressPollTimer) {
-            clearInterval(progressPollTimer);
-            progressPollTimer = null;
-        }
-    }
-
     function formatProgressPanel(data) {
         const session = data.session;
         if (!session) return "";
@@ -67,44 +56,34 @@ document.addEventListener("DOMContentLoaded", () => {
 
         if (session.execution_output) {
             text += "\n── SAÍDA DO INICIADOR ──\n";
-            session.execution_output.trim().split("\n").slice(-6).forEach(line => {
+            session.execution_output.trimEnd().split("\n").forEach(line => {
                 text += `  ${line}\n`;
             });
         }
 
         if (session.status === "completed") {
             text += "\n✓ Teste concluído pelo terminal iniciador.\n";
-            stopProgressPoll();
         }
 
         return text;
     }
 
-    function startProgressPoll() {
-        stopProgressPoll();
-        isSessionJoiner = true;
-        lastLogCount = 0;
-
-        progressPollTimer = setInterval(() => {
-            fetch("/api/session")
-                .then(res => res.json())
-                .then(data => {
-                    if (!data.active || !data.session) {
-                        stopProgressPoll();
-                        return;
-                    }
-
-                    const logLen = (data.session.progress_log || []).length;
-                    if (logLen !== lastLogCount || data.session.status === "completed") {
-                        terminalOutput.textContent = formatProgressPanel(data);
-                        lastLogCount = logLen;
-                    }
-
-                    if (data.session.status === "completed") {
-                        isSessionJoiner = false;
-                    }
-                });
-        }, 500);
+    function startProgressPoll(session) {
+        const url = "/api/session?created_at=" + encodeURIComponent(session.created_at);
+        async function poll() {
+            try {
+                const response = await fetch(url, { cache: "no-store" });
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.session) terminalOutput.textContent = formatProgressPanel(data);
+                    if (!data.active) return;
+                }
+            } catch {
+                // Retry this session after a temporary connection failure.
+            }
+            setTimeout(poll, 500);
+        }
+        poll();
     }
 
     tabs.forEach(tab => {
@@ -129,7 +108,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     p => p.terminal_id === data.terminal_id
                 );
                 if (isParticipant && data.session.status !== "completed") {
-                    startProgressPoll();
+                    startProgressPoll(data.session);
                 } else {
                     terminalOutput.textContent =
                         `[Sessão ativa] Teste: ${data.session.titulo || data.session.test_file}\n` +
@@ -155,7 +134,7 @@ document.addEventListener("DOMContentLoaded", () => {
                         const role = result.session.participants.slice(-1)[0].role;
                         terminalOutput.textContent =
                             `[OK] Você entrou como: ${role}\nIniciando monitor de progresso...\n`;
-                        startProgressPoll();
+                        startProgressPoll(result.session);
                     }
                 });
         }
