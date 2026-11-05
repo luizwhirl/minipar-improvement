@@ -7,7 +7,7 @@ from ast_nodes import (
     UnaryExpr, NumberExpr, StringExpr, BoolExpr, SeqBlock, ParBlock, IfStmt, WhileStmt,
     DoWhileStmt, ForStmt, BreakStmt, ContinueStmt, InputExpr,
     ClassDecl, FuncDecl, ReturnStmt, MethodCall, FuncCallExpr, PropertyAccess, PropertyAssign, NewExpr, ThisExpr,
-    CChannelExpr, SendStmt, ReceiveExpr, ListLiteral, MatrixCreateExpr, IndexExpr, IndexAssign
+    CChannelExpr, SendStmt, ReceiveExpr, ListLiteral, MatrixCreateExpr, IndexExpr, IndexAssign, ForkExpr, JoinExpr
 )
 
 @dataclass
@@ -86,6 +86,13 @@ class SemanticAnalyzer:
             if node.name in ("range", "parse_ints"): return "list"
             return "unknown"
         if isinstance(node, IndexExpr): return "unknown"
+        
+        if isinstance(node, ForkExpr): 
+            return "task"
+        
+        if isinstance(node, JoinExpr): 
+            return "unknown"
+        
         return "unknown"
 
     def _types_compatible(self, declared: str, actual: str) -> bool:
@@ -246,6 +253,16 @@ class SemanticAnalyzer:
             pass
         elif isinstance(node, InputExpr):
             if node.prompt: self.validate_node(node.prompt)
+        elif isinstance(node, ForkExpr):
+            if not isinstance(node.function_call, (FuncCallExpr, MethodCall)):
+                self._report(node.line, "A expressao 'fork' exige uma chamada de funcao ou metodo.")
+            self.validate_node(node.function_call)
+
+        elif isinstance(node, JoinExpr):
+            self.validate_node(node.task)
+            task_type = self._infer_type(node.task)
+            if task_type not in ("task", "unknown", "var"):
+                self._report(node.line, f"A expressao 'join' exige um identificador de tarefa, recebido: '{task_type}'.")
 
     def analyze(self, program: Program) -> bool:
         self._collect_declarations(program)
