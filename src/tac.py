@@ -6,7 +6,7 @@ from ast_nodes import (
     UnaryExpr, NumberExpr, StringExpr, BoolExpr, IdentifierExpr, IfStmt, WhileStmt,
     DoWhileStmt, ForStmt, BreakStmt, ContinueStmt, InputExpr,
     ClassDecl, FuncDecl, ReturnStmt, MethodCall, FuncCallExpr, PropertyAccess, PropertyAssign, NewExpr, ThisExpr,
-    CChannelExpr, SendStmt, ReceiveExpr, ListLiteral, MatrixCreateExpr, IndexExpr, IndexAssign
+    CChannelExpr, SendStmt, ReceiveExpr, ListLiteral, MatrixCreateExpr, IndexExpr, IndexAssign, ForkExpr, JoinExpr
 )
 
 
@@ -142,6 +142,22 @@ class TACGenerator:
             else:
                 self._emit(f"{tmp} = input()")
             return tmp
+        if isinstance(node, ForkExpr):
+            call_node = node.function_call
+            args = call_node.arguments
+            name = call_node.name if isinstance(call_node, FuncCallExpr) else f"{self._expr(call_node.object)}.{call_node.method_name}"
+            for arg in args:
+                self._emit(f"param {self._expr(arg)}")
+                
+            tmp = self._temp()
+            self._emit(f"{tmp} = spawn {name}, {len(args)}")
+            return tmp
+
+        if isinstance(node, JoinExpr):
+            task_tmp = self._expr(node.task)
+            tmp = self._temp()
+            self._emit(f"{tmp} = join {task_tmp}")
+            return tmp
         return "?"
 
     def _stmt(self, node: Optional[ASTNode]) -> None:
@@ -220,6 +236,8 @@ class TACGenerator:
             self._emit(f"func {node.name}:")
             self._stmt(node.body)
             self._emit(f"endfunc {node.name}")
+        elif isinstance(node, (FuncCallExpr, MethodCall, ForkExpr, JoinExpr)):
+            self._expr(node)
 
     def generate_text(self, program: Program) -> str:
         if any(isinstance(stmt, FuncDecl) and stmt.name == "quicksort_iterativo" for stmt in program.statements):
