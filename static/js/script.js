@@ -1,201 +1,91 @@
 document.addEventListener("DOMContentLoaded", () => {
-    const editorMinipar = CodeMirror.fromTextArea(document.getElementById("editor-minipar"), {
-        mode: "clike",
-        theme: "dracula",
-        lineNumbers: true,
-        autoCloseBrackets: true
+    const byId = id => document.getElementById(id);
+    const source = byId("editor-minipar");
+    const editor = window.CodeMirror?.fromTextArea(source, {
+        mode: "text/x-c++src", theme: "dracula", lineNumbers: true,
+        indentUnit: 4, lineWrapping: true
     });
-
-    const editorCpp = CodeMirror.fromTextArea(document.getElementById("editor-cpp"), {
-        mode: "text/x-c++src",
-        theme: "dracula",
-        lineNumbers: true,
-        readOnly: true
-    });
-
-    const editorTac = CodeMirror.fromTextArea(document.getElementById("editor-tac"), {
-        mode: "clike",
-        theme: "dracula",
-        lineNumbers: true,
-        readOnly: true
-    });
-
-    const testList         = document.getElementById("test-list");
-    const currentFileLabel = document.getElementById("current-file");
-    const terminalOutput   = document.getElementById("terminal-output");
-    const btnRun           = document.getElementById("btn-run");
-    const btnClear         = document.getElementById("btn-clear");
-    const tabs             = document.querySelectorAll(".tab");
-
-    let currentTestSpec = null;
-    function formatProgressPanel(data) {
-        const session = data.session;
-        if (!session) return "";
-
-        const myRole = session.participants?.find(
-            p => p.terminal_id === data.terminal_id
-        )?.role || "participante";
-
-        const percent = session.progress_percent ?? 0;
-        const filled = Math.floor(percent / 5);
-        const bar = "█".repeat(filled) + "░".repeat(20 - filled);
-
-        let text =
-            "══ TERMINAL PARTICIPANTE — MONITOR DE PROGRESSO ══\n\n" +
-            `Terminal : ${data.terminal_id}\n` +
-            `Papel    : ${myRole}\n` +
-            `Teste    : ${session.titulo || session.test_file}\n` +
-            `Status   : ${session.phase_message || session.status}\n` +
-            `[${bar}] ${percent}%\n\n` +
-            "── LOG DE ATIVIDADE ──\n";
-
-        (session.progress_log || []).forEach(entry => {
-            const prefix = entry.source === "initiator" ? "→" : "•";
-            text += `${prefix} [${entry.time}] ${entry.message}\n`;
-        });
-
-        if (session.execution_output) {
-            text += "\n── SAÍDA DO INICIADOR ──\n";
-            session.execution_output.trimEnd().split("\n").forEach(line => {
-                text += `  ${line}\n`;
-            });
-        }
-
-        if (session.status === "completed") {
-            text += "\n✓ Teste concluído pelo terminal iniciador.\n";
-        }
-
-        return text;
+    const getCode = () => editor?.getValue ? editor.getValue() : source.value;
+    function setCode(code) {
+        if (editor?.setValue) editor.setValue(code);
+        else source.value = code;
     }
+    const examples = byId("examples");
+    const terminalOutput = byId("terminal-output");
+    const file = byId("current-file");
+    const run = byId("btn-run");
+    const clear = byId("btn-clear");
+    const tabs = Array.from(document.querySelectorAll('[role="tab"]'));
+    let spec = null;
 
-    function startProgressPoll(session) {
-        const url = "/api/session?created_at=" + encodeURIComponent(session.created_at);
-        async function poll() {
-            try {
-                const response = await fetch(url, { cache: "no-store" });
-                if (response.ok) {
-                    const data = await response.json();
-                    if (data.session) terminalOutput.textContent = formatProgressPanel(data);
-                    if (!data.active) return;
-                }
-            } catch {
-                // Retry this session after a temporary connection failure.
-            }
-            setTimeout(poll, 500);
-        }
-        poll();
-    }
-
-    tabs.forEach(tab => {
-        tab.addEventListener("click", () => {
-            tabs.forEach(t => t.classList.remove("active"));
-            document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
-            tab.classList.add("active");
-            document.getElementById(tab.dataset.target).classList.add("active");
-            editorCpp.refresh();
-            editorTac.refresh();
-        });
-    });
-
-    // Verifica sessão multi-terminal ativa ao carregar a IDE
-    fetch("/api/session")
-        .then(res => res.json())
-        .then(data => {
-            if (data.active && data.needs_choice) {
-                showSessionChoiceDialog(data);
-            } else if (data.active) {
-                const isParticipant = data.session.participants?.some(
-                    p => p.terminal_id === data.terminal_id
-                );
-                if (isParticipant && data.session.status !== "completed") {
-                    startProgressPoll(data.session);
-                } else {
-                    terminalOutput.textContent =
-                        `[Sessão ativa] Teste: ${data.session.titulo || data.session.test_file}\n` +
-                        `Terminal: ${data.terminal_id}\n` +
-                        `Participantes: ${data.session.participants.length}/${data.session.required_participants}`;
-                }
-            }
-        });
-
-    function showSessionChoiceDialog(sessionData) {
-        const session = sessionData.session;
-        const msg =
-            `Teste em andamento: ${session.titulo || session.test_file}\n` +
-            `Participantes: ${session.participants.length}/${session.required_participants}\n` +
-            `Seu terminal: ${sessionData.terminal_id}\n\n` +
-            `Deseja participar deste teste ou executar de forma independente?`;
-
-        if (confirm(msg + "\n\nOK = Participar do teste\nCancelar = Modo independente")) {
-            fetch("/api/session/join", { method: "POST" })
-                .then(res => res.json())
-                .then(result => {
-                    if (result.success) {
-                        const role = result.session.participants.slice(-1)[0].role;
-                        terminalOutput.textContent =
-                            `[OK] Você entrou como: ${role}\nIniciando monitor de progresso...\n`;
-                        startProgressPoll(result.session);
-                    }
-                });
+    function showTab(selected) {
+        for (const tab of tabs) {
+            const active = tab === selected;
+            tab.setAttribute("aria-selected", String(active));
+            tab.tabIndex = active ? 0 : -1;
+            byId(tab.getAttribute("aria-controls")).hidden = !active;
         }
     }
+    tabs.forEach((tab, index) => {
+        tab.onclick = () => showTab(tab);
+        tab.onkeydown = event => {
+            const next = { ArrowRight: (index + 1) % tabs.length,
+                ArrowLeft: (index + tabs.length - 1) % tabs.length,
+                Home: 0, End: tabs.length - 1 }[event.key];
+            if (next === undefined) return;
+            event.preventDefault();
+            showTab(tabs[next]);
+            tabs[next].focus();
+        };
+    });
 
-    fetch("/api/tests")
-        .then(res => res.json())
-        .then(data => {
-            data.tests.forEach(test => {
-                const li = document.createElement("li");
-                li.textContent = test;
-                li.onclick = () => loadTest(test, li);
-                testList.appendChild(li);
-            });
-        });
-
-    function loadTestSpec(filename) {
-        return fetch("/api/test_spec", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ filename })
-        })
-        .then(res => res.json())
-        .then(spec => {
-            currentTestSpec = spec.titulo ? spec : null;
-            return currentTestSpec;
-        });
-    }
-
-    function loadTest(filename, element) {
-        document.querySelectorAll(".test-list li").forEach(li => li.classList.remove("active"));
-        if (element) element.classList.add("active");
-
-        currentFileLabel.textContent = filename;
-        terminalOutput.textContent = `Carregando ${filename}...`;
+    function status(label) { byId("status").textContent = label; }
+    function lock(value) { run.disabled = clear.disabled = examples.disabled = value; }
+    function resetResults(message) {
+        showTab(tabs[0]);
+        terminalOutput.textContent = message;
         terminalOutput.classList.remove("error-text");
-
-        Promise.all([
-            fetch("/api/get_test", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ filename })
-            }).then(res => res.json()),
-            loadTestSpec(filename)
-        ]).then(([data, spec]) => {
-            if (data.code) {
-                editorMinipar.setValue(data.code);
-                editorCpp.setValue("");
-                editorTac.setValue("");
-
-                let info = "Arquivo carregado. Clique em 'Compile & Run'.";
-                if (spec) {
-                    const tags = [];
-                    if (spec.requires_input) tags.push(`${spec.input_count || spec.inputs.length} input(s)`);
-                    if (spec.multi_computer) tags.push(`${spec.multi_computer.count} terminais`);
-                    if (tags.length) info += `\n[${tags.join(" | ")}]`;
-                }
-                terminalOutput.textContent = info;
-            }
-        });
+        byId("cpp-code").textContent = "Compile o programa para ver o C++.";
+        byId("tac-code").textContent = "Compile o programa para ver o TAC.";
     }
+    async function post(url, body) {
+        const response = await fetch(url, { method: "POST",
+            headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Falha na solicitação.");
+        return data;
+    }
+    function showError(error) {
+        status("Erro");
+        terminalOutput.classList.add("error-text");
+        terminalOutput.textContent = error.message;
+    }
+
+    connectSessionMonitor(terminalOutput, label => {
+        status(label);
+        lock(label === "Monitorando");
+        showTab(tabs[0]);
+    });
+    fetch("/api/tests").then(res => res.json()).then(data => {
+        for (const filename of data.tests) examples.add(new Option(filename, filename));
+    }).catch(showError);
+
+    examples.onchange = async () => {
+        const filename = examples.value;
+        if (!filename) return;
+        lock(true);
+        try {
+            const [program, metadata] = await Promise.all([
+                post("/api/get_test", { filename }), post("/api/test_spec", { filename })
+            ]);
+            setCode(program.code);
+            spec = metadata;
+            file.textContent = filename;
+            resetResults("Programa carregado. Pronto para executar.");
+            status("Pronto");
+        } catch (error) { showError(error); }
+        finally { lock(false); }
+    };
 
     async function collectInputs(spec) {
         if (!spec || !spec.requires_input || !spec.inputs.length) return [];
@@ -268,82 +158,39 @@ document.addEventListener("DOMContentLoaded", () => {
         return true;
     }
 
-    function setCompiling(state) {
-        btnRun.disabled = state;
-        btnRun.textContent = state ? "⏳ Compilando..." : "▶ Compile & Run";
-    }
-
-    async function runCompile(code, filename, inputs) {
-        setCompiling(true);
-        terminalOutput.textContent = "Rodando compilador...";
-        terminalOutput.classList.remove("error-text");
-
+    run.onclick = async () => {
+        lock(true);
+        const filename = file.textContent;
+        const code = getCode();
+        resetResults("Preparando execução…");
+        status("Preparando");
         try {
-            const res = await fetch("/api/compile", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ code, filename, inputs })
-            });
-            const data = await res.json();
-
-            if (data.cpp) editorCpp.setValue(data.cpp);
-            if (data.tac) editorTac.setValue(data.tac);
-
-            setTimeout(() => { editorCpp.refresh(); editorTac.refresh(); }, 50);
-
-            if (data.success) {
-                terminalOutput.textContent = data.stdout || "Compilação concluída com sucesso!";
-                terminalOutput.classList.remove("error-text");
-            } else {
-                terminalOutput.textContent = data.stderr || data.error || "Erro na execução.";
-                terminalOutput.classList.add("error-text");
-            }
-        } catch (err) {
-            terminalOutput.textContent = "Erro de conexão com o servidor Backend.";
-            terminalOutput.classList.add("error-text");
-        } finally {
-            setCompiling(false);
-        }
-    }
-
-    btnRun.onclick = async () => {
-        const code     = editorMinipar.getValue();
-        const filename = currentFileLabel.textContent;
-
-        if (!currentTestSpec) {
-            await loadTestSpec(filename);
-        }
-
-        const spec = currentTestSpec;
-
-        if (spec && spec.multi_computer && spec.multi_computer.required) {
-            const proceed = await handleMultiComputer(spec, filename);
-            if (!proceed) {
-                terminalOutput.textContent = "[INFO] Execução cancelada — aguardando participantes.";
+            const inputs = await collectInputs(spec);
+            if (inputs === null || !await handleMultiComputer(spec, filename)) {
+                status("Cancelado");
+                terminalOutput.textContent = "Execução cancelada.";
                 return;
             }
-        }
-
-        let inputs = [];
-        if (spec && spec.requires_input) {
-            inputs = await collectInputs(spec);
-            if (inputs === null) {
-                terminalOutput.textContent = "[INFO] Execução cancelada — entrada não fornecida.";
-                return;
-            }
-        }
-
-        await runCompile(code, filename, inputs);
+            status("Compilando");
+            terminalOutput.textContent = "Compilando e executando o programa…";
+            const data = await post("/api/compile", { code, filename, inputs });
+            byId("cpp-code").textContent = data.cpp || "Nenhum código C++ gerado.";
+            byId("tac-code").textContent = data.tac || "Nenhum TAC gerado.";
+            if (!data.success) throw new Error(data.stderr || data.error || "Erro na execução.");
+            terminalOutput.textContent = data.stdout || "Execução concluída.";
+            status("Concluído");
+        } catch (error) { showError(error); }
+        finally { lock(false); }
     };
 
-    btnClear.onclick = () => {
-        editorMinipar.setValue("");
-        editorCpp.setValue("");
-        editorTac.setValue("");
-        currentFileLabel.textContent = "ide_temp.minipar";
-        currentTestSpec = null;
-        document.querySelectorAll(".test-list li").forEach(li => li.classList.remove("active"));
-        terminalOutput.textContent = "Workspace limpo. Pode começar a digitar.";
-        terminalOutput.classList.remove("error-text");
+    clear.onclick = () => {
+        setCode("");
+        spec = null;
+        examples.value = "";
+        file.textContent = "ide_temp.minipar";
+        resetResults("Compile o programa para ver a saída.");
+        status("Pronto");
+        if (editor?.focus) editor.focus();
+        else source.focus();
     };
 });
