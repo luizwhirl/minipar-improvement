@@ -1,62 +1,50 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="pt-BR">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Minipar IDE</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/theme/dracula.min.css">
-    <link rel="stylesheet" href="/static/css/style.css">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MiniPar · Laboratório de compilação</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/theme/dracula.min.css">
+<link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
-    <div class="app-container">
-        <aside class="sidebar">
-            <div class="sidebar-header">
-                <h2>Explorer</h2>
-            </div>
-            <ul id="test-list" class="test-list"></ul>
-        </aside>
+<header class="mast"><div class="frame brand"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M3 25V8l7 9 6-9v17m5-1V8h4a5 5 0 0 1 0 10h-4"/></svg><b>MiniPar</b><span>Laboratório de compilação</span></div></header>
+<main class="frame">
+  <div class="toolbar"><h1>Área de trabalho</h1><div class="actions">
+    <label for="examples">Exemplos</label><select id="examples"><option value="">Escolher programa</option></select>
+    <button class="run" id="btn-run">▶ &nbsp; Compilar e executar</button>
+  </div></div>
+  <div class="workspace">
+    <section class="panel source"><div class="panel-title"><h2><span aria-hidden="true">❮❯</span> Código-fonte</h2><button id="btn-clear">Novo arquivo</button></div>
+      <div class="filebar"><i></i><span id="current-file">ide_temp.minipar</span></div>
+      <div class="editing"><textarea spellcheck="false" aria-label="Código MiniPar" id="editor-minipar"># Soma dos números de 1 a 5
+seq {
+    var numero = 1;
+    var soma = 0;
 
-        <main class="main-content">
-            <header class="topbar">
-                <div class="file-info">
-                    <span id="current-file">ide_temp.minipar</span>
-                </div>
-                <div class="actions">
-                    <button id="btn-run" class="btn primary">▶ Compile &amp; Run</button>
-                    <button id="btn-clear" class="btn secondary">Clear</button>
-                </div>
-            </header>
+    while (numero &lt;= 5) {
+        soma = soma + numero;
+        numero = numero + 1;
+    }
 
-            <div class="editor-workspace">
-                <div class="editor-pane pane-left">
-                    <div class="pane-header">Source (Minipar)</div>
-                    <textarea id="editor-minipar"></textarea>
-                </div>
-
-                <div class="editor-pane pane-right">
-                    <div class="pane-tabs">
-                        <button class="tab active" data-target="out-cpp">C++ Output</button>
-                        <button class="tab" data-target="out-tac">TAC Output</button>
-                    </div>
-                    <div class="tab-content active" id="out-cpp">
-                        <textarea id="editor-cpp"></textarea>
-                    </div>
-                    <div class="tab-content" id="out-tac">
-                        <textarea id="editor-tac"></textarea>
-                    </div>
-                </div>
-            </div>
-
-            <footer class="terminal">
-                <div class="terminal-header">Terminal Output</div>
-                <pre id="terminal-output">Ready...</pre>
-            </footer>
-        </main>
-    </div>
-
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/clike/clike.min.js"></script>
-    <script src="/static/js/script.js"></script>
-</body>
-</html>
+    print("Soma:", soma);
+}</textarea></div>
+      <div class="foot"><span>MiniPar</span><span>UTF-8</span></div>
+    </section>
+    <section class="panel results"><div class="panel-title"><h2><span aria-hidden="true">▤</span> Resultados</h2><span id="status" role="status">Pronto</span></div>
+      <div class="tabs" role="tablist" aria-label="Resultados da compilação">
+        <button id="tab-exec" role="tab" aria-selected="true" aria-controls="out-exec">Execução</button>
+        <button id="tab-tac" role="tab" aria-selected="false" aria-controls="out-tac" tabindex="-1">TAC</button>
+        <button id="tab-cpp" role="tab" aria-selected="false" aria-controls="out-cpp" tabindex="-1">C++ gerado</button>
+      </div>
+      <div class="output" id="out-exec" role="tabpanel" aria-labelledby="tab-exec" tabindex="0"><pre id="terminal-output">Compile o programa para ver a saída.</pre></div>
+      <div class="output" id="out-tac" role="tabpanel" aria-labelledby="tab-tac" tabindex="0" hidden><pre id="tac-code">Compile o programa para ver o TAC.</pre></div>
+      <div class="output" id="out-cpp" role="tabpanel" aria-labelledby="tab-cpp" tabindex="0" hidden><pre id="cpp-code">Compile o programa para ver o C++.</pre></div>
+    </section>
+  </div>
+</main>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/clike/clike.min.js"></script>
+<script src="/static/js/session-monitor.js"></script>
+<script src="/static/js/script.js"></script>
+</body></html>

@@ -3,11 +3,13 @@ import subprocess
 import os
 import sys
 import glob
+from run_artifacts import create_run_dir, executable_path
 
 from test_orchestrator import (
     get_spec_summary,
     finalize_test_execution,
-    check_active_session_for_new_terminal,
+    inspect_active_session,
+    load_completed_session,
     join_session,
     get_terminal_id,
     create_session,
@@ -60,21 +62,25 @@ def get_test_spec_api():
 
 @app.route('/api/session', methods=['GET'])
 def get_session():
-    action, session = check_active_session_for_new_terminal()
+    needs_choice, session = inspect_active_session()
+    created_at = request.args.get('created_at')
+    if created_at and (not session or session.get('created_at') != created_at):
+        session = load_completed_session(created_at)
+        needs_choice = False
     if session:
         return jsonify({
             "active": session.get("status") not in ("completed", "cancelled"),
             "session": session,
             "terminal_id": get_terminal_id(),
-            "needs_choice": action is not None,
+            "needs_choice": needs_choice,
         })
     return jsonify({"active": False, "terminal_id": get_terminal_id()})
 
 
 @app.route('/api/session/join', methods=['POST'])
 def session_join():
-    _, session = check_active_session_for_new_terminal()
-    if session:
+    _, session = inspect_active_session()
+    if session and session.get("status") not in ("completed", "cancelled"):
         join_session(session)
         return jsonify({"success": True, "session": session})
     return jsonify({"success": False, "error": "Nenhuma sessão ativa"}), 404
@@ -114,11 +120,14 @@ def session_clear():
 def compile_code():
     data = request.json
     code = data.get('code')
-    filename = data.get('filename', 'ide_temp.minipar')
+    filename = os.path.basename(data.get('filename', 'ide_temp.minipar'))
     user_inputs = data.get('inputs', [])
     
     # Salva o código recebido da IDE em um arquivo temporário
-    file_path = os.path.join(TEMP_DIR, filename)
+    output_dir = create_run_dir(OUTPUT_DIR)
+    source_dir = os.path.join(output_dir, "source")
+    os.makedirs(source_dir)
+    file_path = os.path.join(source_dir, filename)
     with open(file_path, 'w', encoding='utf-8') as f:
         f.write(code)
         
@@ -132,7 +141,8 @@ def compile_code():
         # 1. FASE DE COMPILAÇÃO (Gera TAC e C++)
         # ==========================================
         process = subprocess.run(
-            ['python', 'main.py', file_path], 
+            [sys.executable, os.path.join(app.root_path, 'main.py'), file_path,
+             base_name, '--output-dir', output_dir],
             capture_output=True, 
             text=True, 
             timeout=15
@@ -151,8 +161,7 @@ def compile_code():
         if success:
             set_session_phase("compiling", "Compilação concluída.", percent=80)
             append_session_log("Compilação concluída — executando binário.")
-            exe_ext = ".exe" if sys.platform == "win32" else ""
-            exe_path = os.path.join(OUTPUT_DIR, f"{base_name}{exe_ext}")
+            exe_path = executable_path(output_dir, base_name)
             
             if os.path.exists(exe_path):
                 full_output += f"\n--- Executando {base_name} ---\n"
@@ -189,8 +198,8 @@ def compile_code():
         # ==========================================
         # 3. COLETA DOS ARQUIVOS GERADOS
         # ==========================================
-        cpp_file = os.path.join(OUTPUT_DIR, f"{base_name}.cpp")
-        tac_file = os.path.join(OUTPUT_DIR, f"{base_name}.tac")
+        cpp_file = os.path.join(output_dir, f"{base_name}.cpp")
+        tac_file = os.path.join(output_dir, f"{base_name}.tac")
         
         cpp_code = ""
         tac_code = ""
