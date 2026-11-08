@@ -1,4 +1,5 @@
 from __future__ import annotations
+from dataclasses import fields, is_dataclass
 import os
 import subprocess
 import sys
@@ -8,9 +9,23 @@ from ast_nodes import (
     UnaryExpr, NumberExpr, StringExpr, BoolExpr, IdentifierExpr, IfStmt, WhileStmt,
     DoWhileStmt, ForStmt, BreakStmt, ContinueStmt, InputExpr,
     ClassDecl, FuncDecl, ReturnStmt, MethodCall, FuncCallExpr, PropertyAccess, PropertyAssign, NewExpr, ThisExpr,
-    CChannelExpr, SendStmt, ReceiveExpr, ListLiteral, MatrixCreateExpr, IndexExpr, IndexAssign
+    CChannelExpr, SendStmt, ReceiveExpr, ListLiteral, MatrixCreateExpr, IndexExpr, IndexAssign,
+    ForkExpr, JoinExpr
 )
 from cpp_template import _CPP_HEADER
+
+
+def unsupported_cpp_nodes(value):
+    """Find unsupported parallel expressions, including standalone statements."""
+    if isinstance(value, (ForkExpr, JoinExpr)):
+        yield value
+    if is_dataclass(value):
+        for field in fields(value):
+            yield from unsupported_cpp_nodes(getattr(value, field.name))
+    elif isinstance(value, list):
+        for item in value:
+            yield from unsupported_cpp_nodes(item)
+
 
 class CppCodeGenerator:
     @staticmethod
@@ -224,7 +239,13 @@ class CppCodeGenerator:
             return f"{self._translate_expression(node.target)} = {self._translate_expression(node.value)}"
         return self._translate_expression(node)
 
-    def generate(self, program: Program, output_name: str, output_dir: str = "output") -> bool:
+    def generate_text(self, program: Program) -> str:
+        """Translate an AST to C++ without writing files or invoking a compiler."""
+        unsupported = next(unsupported_cpp_nodes(program), None)
+        if unsupported is not None:
+            operator = "fork" if isinstance(unsupported, ForkExpr) else "join"
+            raise NotImplementedError(
+                f"Linha {unsupported.line}: A geração C++ para '{operator}' ainda não está implementada.")
         cpp_code = _CPP_HEADER
         
         for node in program.statements:
@@ -261,7 +282,14 @@ class CppCodeGenerator:
                     for stmt in node.statements: cpp_code += self._translate_statement(stmt, "    ")
                 else: cpp_code += self._translate_statement(node, "    ")
         cpp_code += "\n    return 0;\n}\n"
+        return cpp_code
 
+    def generate(self, program: Program, output_name: str, output_dir: str = "output") -> bool:
+        try:
+            cpp_code = self.generate_text(program)
+        except NotImplementedError as error:
+            print(f"[ERRO] {error}", file=sys.stderr)
+            return False
         os.makedirs(output_dir, exist_ok=True)
         cpp_path = os.path.join(output_dir, f"{output_name}.cpp")
         exe_ext = ".exe" if sys.platform == "win32" else ""

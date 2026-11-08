@@ -86,12 +86,32 @@ A IDE permite:
 - Visualizar o código C++ gerado
 - Executar o programa e ver a saída
 
-Na interface didática, a barra de fases do MINIP-11 prepara os painéis de
-**Tokens**, **AST** e **Semântica**; a integração dessas fases com a API ainda está
-pendente. As opções **TAC** e **Código C++** exibem os artefatos retornados pela
-última execução. **Compilar/Baixar** permanece indisponível enquanto não houver
-suporte ao download do executável. **Executar** mantém a operação atual: compila
-o programa, executa o binário no servidor e apresenta a saída.
+Na interface didática, cada opção da barra analisa o código atual do editor:
+
+- **Tokens:** tipo, texto, linha e coluna dos tokens reconhecidos pelo lexer.
+- **AST:** representação JSON dos nós produzidos pelo parser.
+- **Semântica:** resultado da validação e os diagnósticos encontrados.
+- **TAC** e **Código C++:** código gerado sem compilar ou executar o programa.
+
+As análises não solicitam entradas de `input()` nem iniciam sessões de execução.
+Se uma fase anterior falhar, o painel informa onde a análise parou. Alterar o
+código invalida os resultados anteriores; selecionar uma fase novamente analisa
+a nova versão. A árvore gráfica da AST continua sendo uma entrega separada.
+
+**Compilar/Baixar** permanece indisponível enquanto não houver suporte ao download
+do executável. **Executar** mantém a operação atual: compila o programa, executa o
+binário no servidor e apresenta a saída.
+
+A API de fases usa `POST /api/analyze` com JSON no formato
+`{"code": "seq { print(1); }", "phase": "tokens"}`. As fases aceitas são `tokens`,
+`ast`, `semantic`, `tac` e `cpp`. A resposta contém `success`, `phase`,
+`failed_phase`, `result` e `diagnostics`. Cada análise é executada em um processo
+isolado, com limite de 15 segundos, sem gerar arquivos ou invocar `g++`.
+
+Enquanto a geração C++ de `fork` e `join` não estiver implementada, a opção
+**Código C++** informa essa limitação para programas que utilizam esses operadores.
+Tokens, AST, Semântica e TAC continuam disponíveis para esses programas quando
+as respectivas análises forem válidas.
 
 ### 2. Execução Direta (CLI)
 

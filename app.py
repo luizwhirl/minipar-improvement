@@ -3,6 +3,7 @@ import subprocess
 import os
 import sys
 import glob
+import json
 from run_artifacts import create_run_dir, executable_path
 
 from test_orchestrator import (
@@ -118,6 +119,52 @@ def session_ready():
 def session_clear():
     clear_session()
     return jsonify({"success": True})
+
+
+@app.route('/api/analyze', methods=['POST'])
+def analyze_phase():
+    """Inspect one compiler phase without compiling or running the program."""
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "Envie um objeto JSON com código e fase."}), 400
+    code = data.get("code")
+    phase = data.get("phase")
+    if not isinstance(code, str) or not code.strip():
+        return jsonify({"error": "Informe o código MiniPar que deseja analisar."}), 400
+    if not isinstance(phase, str) or phase not in ("tokens", "ast", "semantic", "tac", "cpp"):
+        return jsonify({"error": "Fase inválida. Escolha Tokens, AST, Semântica, TAC ou C++."}), 400
+
+    try:
+        # Parser diagnostics currently use sys.exit()/stderr. Keep each analysis
+        # in its own process so concurrent web requests retain separate output.
+        process = subprocess.run(
+            [sys.executable, "-X", "utf8", "-B", os.path.join(app.root_path, "analysis_worker.py")],
+            input=json.dumps({"code": code, "phase": phase}),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            timeout=15,
+            cwd=app.root_path,
+        )
+        if process.returncode != 0:
+            app.logger.error("Falha no processo de análise: %s", process.stderr)
+            return jsonify({"error": "Não foi possível concluir a análise do código."}), 500
+        result = json.loads(process.stdout)
+        if (
+            not isinstance(result, dict)
+            or result.get("phase") != phase
+            or not isinstance(result.get("success"), bool)
+            or not isinstance(result.get("diagnostics"), list)
+            or "result" not in result
+            or "failed_phase" not in result
+        ):
+            raise ValueError("Resposta inválida do processo de análise")
+        return jsonify(result)
+    except subprocess.TimeoutExpired:
+        return jsonify({"error": "A análise excedeu o tempo limite de 15 segundos."}), 504
+    except (OSError, ValueError, UnicodeError):
+        app.logger.exception("Falha ao processar a análise da fase %s", phase)
+        return jsonify({"error": "Não foi possível concluir a análise do código."}), 500
 
 
 @app.route('/api/compile', methods=['POST'])

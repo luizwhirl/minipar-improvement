@@ -31,6 +31,8 @@ class TokenType(Enum):
     INPUT     = auto()
     PRINT     = auto()
     MATRIX    = auto()
+    FORK      = auto()
+    JOIN      = auto()
     TYPE      = auto()
     PLUS      = auto()
     MINUS     = auto()
@@ -83,6 +85,8 @@ KEYWORDS: dict[str, TokenType] = {
     "receive":   TokenType.RECEIVE,
     "input":     TokenType.INPUT,
     "matrix":    TokenType.MATRIX,
+    "fork":      TokenType.FORK,
+    "join":      TokenType.JOIN,
     "true":      TokenType.BOOL_LITERAL,
     "false":     TokenType.BOOL_LITERAL,
     "number":    TokenType.TYPE,
@@ -101,12 +105,30 @@ class Token:
     line: int
     col: int
 
+@dataclass
+class LexicalError:
+    """Um erro léxico com posição, para a IDE e as próximas fases reaproveitarem."""
+    line: int
+    col: int
+    message: str
+
+    def __str__(self) -> str:
+        return f"[ERRO LEXICO] Linha {self.line}, col {self.col}: {self.message}"
+
 class Lexer:
     def __init__(self, source_code: str) -> None:
         self._source = source_code
         self._pos = 0
         self._line = 1
         self._col = 1
+        self.errors: List[LexicalError] = []
+
+    def _report(self, line: int, col: int, message: str) -> None:
+        self.errors.append(LexicalError(line, col, message))
+
+    @property
+    def has_errors(self) -> bool:
+        return bool(self.errors)
 
     def _peek(self) -> str:
         if self._pos >= len(self._source): return "\0"
@@ -160,11 +182,13 @@ class Lexer:
                 while self._peek() not in ('"', "\0"):
                     if self._peek() == "\\":
                         self._advance()
+                        if self._peek() == "\0": break
                         escaped = self._advance()
                         escape_map = {"n": "\n", "t": "\t", '"': '"', "\\": "\\"}
                         text += escape_map.get(escaped, escaped)
                     else: text += self._advance()
                 if self._peek() == '"': self._advance()
+                else: self._report(start_line, start_col, "texto sem aspas de fechamento (\")")
                 tokens.append(self._make_token(TokenType.STRING_LITERAL, text, start_line, start_col))
             else:
                 op = self._advance()
@@ -183,12 +207,16 @@ class Lexer:
                     if self._peek() == "&":
                         self._advance()
                         tokens.append(self._make_token(TokenType.AND, "&&", start_line, start_col))
-                    else: tokens.append(self._make_token(TokenType.UNKNOWN, op, start_line, start_col))
+                    else:
+                        self._report(start_line, start_col, "'&' sozinho nao existe; voce quis dizer '&&'?")
+                        tokens.append(self._make_token(TokenType.UNKNOWN, op, start_line, start_col))
                 elif op == "|":
                     if self._peek() == "|":
                         self._advance()
                         tokens.append(self._make_token(TokenType.OR, "||", start_line, start_col))
-                    else: tokens.append(self._make_token(TokenType.UNKNOWN, op, start_line, start_col))
+                    else:
+                        self._report(start_line, start_col, "'|' sozinho nao existe; voce quis dizer '||'?")
+                        tokens.append(self._make_token(TokenType.UNKNOWN, op, start_line, start_col))
                 elif op == "<":
                     if self._peek() == "=":
                         self._advance()
@@ -201,7 +229,9 @@ class Lexer:
                     else: tokens.append(self._make_token(TokenType.GT, ">", start_line, start_col))
                 elif op in single_map:
                     tokens.append(self._make_token(single_map[op], op, start_line, start_col))
-                else: tokens.append(self._make_token(TokenType.UNKNOWN, op, start_line, start_col))
+                else:
+                    self._report(start_line, start_col, f"caractere invalido {op!r}")
+                    tokens.append(self._make_token(TokenType.UNKNOWN, op, start_line, start_col))
 
         tokens.append(Token(TokenType.END_OF_FILE, "", self._line, self._col))
         return tokens
