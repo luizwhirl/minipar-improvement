@@ -38,7 +38,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const phaseViews = Object.fromEntries(phases.map(phase => [phase, {
         panel: byId(`out-${phase}`), feedback: byId(`${phase}-feedback`),
         diagnostics: byId(`${phase}-diagnostics`),
-        content: byId({ ast: "ast-code", tac: "tac-code", cpp: "cpp-code" }[phase] || `${phase}-result`)
+        content: byId({ tac: "tac-code", cpp: "cpp-code" }[phase] || `${phase}-result`)
     }]));
     const phaseCache = new Map();
     let spec = null;
@@ -49,6 +49,8 @@ document.addEventListener("DOMContentLoaded", () => {
     let executionBusy = false;
     let monitoring = false;
     let loadingExample = false;
+    let astViewer = null;
+    let astSource = null;
 
     const controlsBusy = () => executionBusy || monitoring || loadingExample;
 
@@ -89,13 +91,26 @@ document.addEventListener("DOMContentLoaded", () => {
         results.setAttribute("aria-busy", String(value));
     }
 
-    function resetPhase(phase, message = phasePrompts[phase]) {
+    function destroyASTViewer() {
+        const previous = astViewer;
+        astViewer = null;
+        astSource = null;
+        try {
+            previous?.destroy();
+        } catch {
+            // Keep clearing obsolete results if a visual control could not close.
+        }
+    }
+
+    function resetPhase(phase, message = phasePrompts[phase], preserveContent = false) {
         const view = phaseViews[phase];
         view.panel.removeAttribute("aria-busy");
         view.feedback.className = "phase-feedback";
         view.feedback.textContent = message;
         view.diagnostics.replaceChildren();
         view.diagnostics.hidden = true;
+        if (preserveContent) return;
+        if (phase === "ast") destroyASTViewer();
         view.content.replaceChildren();
         view.content.hidden = true;
     }
@@ -209,9 +224,34 @@ document.addEventListener("DOMContentLoaded", () => {
         container.append(scroller);
     }
 
+    function renderAST(ast) {
+        const host = phaseViews.ast.content;
+        host.hidden = false;
+        if (astSource === ast && host.hasChildNodes()) return;
+        destroyASTViewer();
+        host.replaceChildren();
+        astSource = ast;
+        try {
+            if (!window.MiniParASTViewer?.mount) throw new Error("Visualização indisponível.");
+            astViewer = window.MiniParASTViewer.mount(host, ast);
+        } catch {
+            destroyASTViewer();
+            host.replaceChildren();
+            astSource = ast;
+            const notice = document.createElement("p");
+            notice.className = "ast-fallback";
+            notice.textContent = "Não foi possível abrir a árvore interativa. A estrutura completa do programa continua disponível abaixo.";
+            const json = document.createElement("pre");
+            json.id = "ast-code";
+            json.className = "structured-code";
+            json.textContent = JSON.stringify(ast, null, 2);
+            host.append(notice, json);
+        }
+    }
+
     function renderPhase(phase, data) {
         const view = phaseViews[phase];
-        resetPhase(phase);
+        resetPhase(phase, phasePrompts[phase], phase === "ast" && data.success);
         view.feedback.classList.add(data.success ? "is-success" : "is-error");
         view.feedback.textContent = data.success ? "Etapa concluída para o código atual."
             : `A análise foi interrompida: ${phaseNames[data.failed_phase] || "falha em uma etapa anterior"}.`;
@@ -221,7 +261,7 @@ document.addEventListener("DOMContentLoaded", () => {
             renderTokens(view.content, data.result.tokens);
             view.content.hidden = false;
         } else if (data.success) {
-            if (phase === "ast") view.content.textContent = JSON.stringify(data.result, null, 2);
+            if (phase === "ast") renderAST(data.result);
             else if (phase === "semantic") view.content.textContent = data.result.message;
             else view.content.textContent = data.result || "Nenhuma instrução foi gerada para este programa.";
             view.content.hidden = false;

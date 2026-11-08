@@ -73,7 +73,7 @@ seq {
         <div class="phase-explainer"><span class="phase-label">Etapa 2 · Análise sintática</span><h3>Árvore sintática abstrata</h3><p>A AST organiza os comandos e expressões em uma árvore que representa a estrutura do programa.</p></div>
         <p class="phase-feedback" id="ast-feedback" role="status">Selecione AST para analisar a estrutura do código atual.</p>
         <div id="ast-diagnostics" hidden></div>
-        <pre class="phase-result structured-code" id="ast-code" hidden></pre>
+        <div class="phase-result" id="ast-result" hidden></div>
       </div>
       <div class="output" id="out-semantic" role="tabpanel" aria-labelledby="tab-semantic" tabindex="0" hidden>
         <div class="phase-explainer"><span class="phase-label">Etapa 3 · Análise semântica</span><h3>Semântica</h3><p>Esta etapa verifica o uso de variáveis, os tipos e os escopos para identificar operações que não fazem sentido no programa.</p></div>
@@ -102,6 +102,9 @@ seq {
 </main>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/clike/clike.min.js"></script>
+<script src="/static/vendor/d3-7.9.0.min.js"></script>
+<script src="/static/js/ast-tree-model.js"></script>
+<script src="/static/js/ast-viewer.js"></script>
 <script src="/static/js/session-monitor.js"></script>
 <script src="/static/js/script.js"></script>
 </body></html>
