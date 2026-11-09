@@ -142,32 +142,31 @@ class PhaseAnalysisTests(unittest.TestCase):
         self.assertIn("TEXT_ONLY", result)
         self.assertIn("int main", result)
 
-    def test_shared_cpp_generator_rejects_fork_join_before_creating_artifacts(self):
+    def test_shared_cpp_generator_translates_fork_join_without_creating_artifacts(self):
         sources = {
-            "fork": "func work() { return 42; } seq { fork work(); }",
-            "join": "func wait_for(task) { var answer = join(task); return answer; } seq { print(1); }",
+            "fork": ("func work() { return 42; } seq { fork work(); }",
+                     "__fork([=]() { return work(); });"),
+            "join": ("func wait_for(task) { var answer = join(task); return answer; } seq { print(1); }",
+                     "auto answer = __join(task);"),
         }
         programs = {
-            operation: analysis.Parser(analysis.Lexer(code).tokenize()).parse()
-            for operation, code in sources.items()
+            operation: (analysis.Parser(analysis.Lexer(code).tokenize()).parse(), expected)
+            for operation, (code, expected) in sources.items()
         }
         with patch("codegen.subprocess.run", side_effect=AssertionError("Compiler invoked")) as compiler, \
                 patch("builtins.open", side_effect=AssertionError("File opened")) as files, \
                 patch("codegen.os.makedirs", side_effect=AssertionError("Directory created")) as directories:
-            for operation, program in programs.items():
+            for operation, (program, expected) in programs.items():
                 with self.subTest(operation=operation):
-                    generator = analysis.CppCodeGenerator()
-                    with self.assertRaisesRegex(NotImplementedError, operation):
-                        generator.generate_text(program)
-                    errors = io.StringIO()
-                    with redirect_stderr(errors):
-                        self.assertIs(generator.generate(program, "unsupported"), False)
-                    self.assertIn(operation, errors.getvalue().lower())
+                    result = analysis.CppCodeGenerator().generate_text(program)
+                    self.assertIn(expected, result)
+                    self.assertIn("double __fork(F fn)", result)
+                    self.assertIn("double __join(double id)", result)
             compiler.assert_not_called()
             files.assert_not_called()
             directories.assert_not_called()
 
-    def test_fork_join_can_be_inspected_before_cpp_support_is_implemented(self):
+    def test_fork_join_flows_through_every_phase(self):
         code = "func double_value(value) { return value * 2; }\n" \
                "seq { var task = fork double_value(3); var answer = join(task); print(answer); }"
         tokens = self.analyze(code, "tokens")
@@ -184,8 +183,9 @@ class PhaseAnalysisTests(unittest.TestCase):
         self.assertIn("spawn double_value", tac["result"])
         self.assertIn("join task", tac["result"])
         cpp = self.analyze(code, "cpp")
-        self.assert_failure(cpp, "cpp")
-        self.assertTrue(any("fork" in error["message"].lower() for error in cpp["diagnostics"]))
+        self.assert_success(cpp)
+        self.assertIn("auto task = __fork([=]() { return double_value(3); });", cpp["result"])
+        self.assertIn("auto answer = __join(task);", cpp["result"])
 
     def test_invalid_requests_are_rejected_before_starting_the_worker(self):
         valid = {"code": "seq { print(1); }", "phase": "tokens"}
