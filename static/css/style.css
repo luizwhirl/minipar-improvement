@@ -416,31 +416,106 @@ h2 span {
     max-width: 58ch;
 }
 
-.empty-state {
-    border: 1px dashed #d1d9ca;
-    background: #f7f8f2;
-    border-radius: 8px;
-    padding: 28px 20px;
-    text-align: center;
-    color: #596b5d;
-}
-
-.empty-mark {
-    display: inline-grid;
-    place-items: center;
-    width: 42px;
-    height: 42px;
-    border-radius: 10px;
-    color: #6c816c;
-    background: #e9eee1;
-    font: 20px var(--mono);
-}
-
-.empty-state p {
+.phase-feedback {
     font-size: 13px;
     line-height: 1.6;
-    max-width: 36ch;
-    margin: 14px auto 0;
+    margin: 0 0 16px;
+    padding: 11px 13px;
+    color: #52644f;
+    background: #f2f5ec;
+    border: 1px solid #d7dfcf;
+    border-radius: 6px;
+}
+
+.phase-feedback.is-success {
+    color: #24563d;
+    background: #eaf3e5;
+    border-color: #cbdcc1;
+}
+
+.phase-feedback.is-error {
+    color: #902631;
+    background: #fceff0;
+    border-color: #e8c6ca;
+}
+
+.diagnostic-list {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 18px;
+}
+
+.diagnostic-list li {
+    border-left: 3px solid #b64c56;
+    padding: 9px 12px;
+    margin-bottom: 8px;
+    background: #fff8f8;
+    color: #76252e;
+    font-size: 13px;
+    overflow-wrap: anywhere;
+}
+
+.diagnostic-list strong {
+    font-size: 12px;
+}
+
+.diagnostic-list p {
+    margin: 6px 0 0;
+    line-height: 1.6;
+}
+
+.table-scroll {
+    overflow: auto;
+    max-width: 100%;
+}
+
+.token-table {
+    width: 100%;
+    min-width: 400px;
+    border-collapse: collapse;
+    font: 12px/1.5 var(--mono);
+}
+
+.token-table caption {
+    text-align: left;
+    font: 600 13px "Segoe UI",Arial,sans-serif;
+    color: #52644f;
+    padding-bottom: 12px;
+}
+
+.token-table th,.token-table td {
+    padding: 8px 10px;
+    text-align: left;
+    border-bottom: 1px solid #dce3d6;
+    vertical-align: top;
+}
+
+.token-table th {
+    color: #36533b;
+    background: #edf2e7;
+    font-weight: 650;
+}
+
+.token-table td:nth-child(2) {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    max-width: 240px;
+}
+
+.token-error {
+    background: #fff0f1;
+    color: #902631;
+}
+
+.output .structured-code {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.semantic-result {
+    font-size: 14px;
+    line-height: 1.7;
+    color: #285c48;
 }
 
 .output #terminal-output {
