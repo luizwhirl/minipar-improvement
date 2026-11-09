@@ -70,11 +70,13 @@ Opções disponíveis:
 - **[1] Modo Terminal**: navegação pelos testes através de um menu textual.
 - **[2] Modo Web Interface**: inicia o servidor Flask.
 
-Após iniciar a interface web, acesse:
+Após iniciar o servidor, as duas interfaces Web ficam disponíveis:
 
-```text
-http://127.0.0.1:5000
-```
+- **Interface didática (2026.2):** http://127.0.0.1:5000/
+- **Interface anterior (2026.1):** http://127.0.0.1:5000/legacy
+
+A interface anterior mantém o editor, as abas C++/TAC e a ação **Compile & Run**.
+O modo Terminal continua disponível pelo menu, independentemente da interface Web.
 
 A IDE permite:
 
@@ -83,6 +85,13 @@ A IDE permite:
 - Visualizar o código TAC gerado
 - Visualizar o código C++ gerado
 - Executar o programa e ver a saída
+
+Na interface didática, a barra de fases do MINIP-11 prepara os painéis de
+**Tokens**, **AST** e **Semântica**; a integração dessas fases com a API ainda está
+pendente. As opções **TAC** e **Código C++** exibem os artefatos retornados pela
+última execução. **Compilar/Baixar** permanece indisponível enquanto não houver
+suporte ao download do executável. **Executar** mantém a operação atual: compila
+o programa, executa o binário no servidor e apresenta a saída.
 
 ### 2. Execução Direta (CLI)
 

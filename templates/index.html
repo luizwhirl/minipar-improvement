@@ -8,14 +8,45 @@
 <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
-<header class="mast"><div class="frame brand"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M3 25V8l7 9 6-9v17m5-1V8h4a5 5 0 0 1 0 10h-4"/></svg><b>MiniPar</b><span>Laboratório de compilação</span></div></header>
+<header class="mast">
+  <div class="frame brand">
+    <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M3 25V8l7 9 6-9v17m5-1V8h4a5 5 0 0 1 0 10h-4"/></svg>
+    <b>MiniPar</b><span>Interface didática</span>
+    <a class="legacy-link" href="/legacy">Interface anterior <span aria-hidden="true">↗</span></a>
+  </div>
+</header>
 <main class="frame">
   <div class="toolbar"><h1>Área de trabalho</h1><div class="actions">
     <label for="examples">Exemplos</label><select id="examples"><option value="">Escolher programa</option></select>
-    <button class="run" id="btn-run">▶ &nbsp; Compilar e executar</button>
   </div></div>
+  <section class="compiler-tools" aria-labelledby="stages-title">
+    <div class="compiler-head">
+      <div class="stages-intro">
+        <h2 id="stages-title">Etapas da compilação</h2>
+        <p>Explore como o código se transforma, da leitura à execução.</p>
+      </div>
+      <div class="compile-actions">
+        <div class="action-group">
+          <button class="download" id="btn-download" type="button" disabled aria-describedby="download-help">Compilar e baixar</button>
+          <p class="action-help" id="download-help">O download do executável ainda não está disponível.</p>
+        </div>
+        <div class="action-group">
+          <button class="run" id="btn-run" type="button" aria-describedby="run-help"><span aria-hidden="true">▶</span> Executar</button>
+          <p class="action-help" id="run-help">Compila o programa antes de executar.</p>
+        </div>
+      </div>
+    </div>
+    <div class="tabs stage-tabs" role="tablist" aria-label="Etapas e resultados da compilação">
+      <button id="tab-tokens" type="button" role="tab" aria-selected="false" aria-controls="out-tokens" tabindex="-1"><span class="stage-number" aria-hidden="true">1</span>Tokens</button>
+      <button id="tab-ast" type="button" role="tab" aria-selected="false" aria-controls="out-ast" tabindex="-1"><span class="stage-number" aria-hidden="true">2</span>AST</button>
+      <button id="tab-semantic" type="button" role="tab" aria-selected="false" aria-controls="out-semantic" tabindex="-1"><span class="stage-number" aria-hidden="true">3</span>Semântica</button>
+      <button id="tab-tac" type="button" role="tab" aria-selected="false" aria-controls="out-tac" tabindex="-1"><span class="stage-number" aria-hidden="true">4</span>TAC</button>
+      <button id="tab-cpp" type="button" role="tab" aria-selected="false" aria-controls="out-cpp" tabindex="-1"><span class="stage-number" aria-hidden="true">5</span>Código C++</button>
+      <button id="tab-exec" class="execution-tab" type="button" role="tab" aria-selected="true" aria-controls="out-exec"><span aria-hidden="true">▶</span>Execução</button>
+    </div>
+  </section>
   <div class="workspace">
-    <section class="panel source"><div class="panel-title"><h2><span aria-hidden="true">❮❯</span> Código-fonte</h2><button id="btn-clear">Novo arquivo</button></div>
+    <section class="panel source"><div class="panel-title"><h2><span aria-hidden="true">❮❯</span> Código-fonte</h2><button id="btn-clear" type="button">Novo arquivo</button></div>
       <div class="filebar"><i></i><span id="current-file">ide_temp.minipar</span></div>
       <div class="editing"><textarea spellcheck="false" aria-label="Código MiniPar" id="editor-minipar"># Soma dos números de 1 a 5
 seq {
@@ -32,14 +63,30 @@ seq {
       <div class="foot"><span>MiniPar</span><span>UTF-8</span></div>
     </section>
     <section class="panel results"><div class="panel-title"><h2><span aria-hidden="true">▤</span> Resultados</h2><span id="status" role="status">Pronto</span></div>
-      <div class="tabs" role="tablist" aria-label="Resultados da compilação">
-        <button id="tab-exec" role="tab" aria-selected="true" aria-controls="out-exec">Execução</button>
-        <button id="tab-tac" role="tab" aria-selected="false" aria-controls="out-tac" tabindex="-1">TAC</button>
-        <button id="tab-cpp" role="tab" aria-selected="false" aria-controls="out-cpp" tabindex="-1">C++ gerado</button>
+      <div class="output" id="out-tokens" role="tabpanel" aria-labelledby="tab-tokens" tabindex="0" hidden>
+        <div class="phase-explainer"><span class="phase-label">Etapa 1 · Análise léxica</span><h3>Tokens</h3><p>O código é dividido em palavras-chave, nomes, números e símbolos. Cada parte reconhecida é um token.</p></div>
+        <div class="empty-state"><span class="empty-mark" aria-hidden="true">{ }</span><p>A lista de tokens ainda não está disponível nesta interface.</p></div>
       </div>
-      <div class="output" id="out-exec" role="tabpanel" aria-labelledby="tab-exec" tabindex="0"><pre id="terminal-output">Compile o programa para ver a saída.</pre></div>
-      <div class="output" id="out-tac" role="tabpanel" aria-labelledby="tab-tac" tabindex="0" hidden><pre id="tac-code">Compile o programa para ver o TAC.</pre></div>
-      <div class="output" id="out-cpp" role="tabpanel" aria-labelledby="tab-cpp" tabindex="0" hidden><pre id="cpp-code">Compile o programa para ver o C++.</pre></div>
+      <div class="output" id="out-ast" role="tabpanel" aria-labelledby="tab-ast" tabindex="0" hidden>
+        <div class="phase-explainer"><span class="phase-label">Etapa 2 · Análise sintática</span><h3>Árvore sintática abstrata</h3><p>A AST organiza os comandos e expressões em uma árvore que representa a estrutura do programa.</p></div>
+        <div class="empty-state"><span class="empty-mark" aria-hidden="true">↳</span><p>A visualização da árvore ainda não está disponível nesta interface.</p></div>
+      </div>
+      <div class="output" id="out-semantic" role="tabpanel" aria-labelledby="tab-semantic" tabindex="0" hidden>
+        <div class="phase-explainer"><span class="phase-label">Etapa 3 · Análise semântica</span><h3>Semântica</h3><p>Esta etapa verifica o uso de variáveis, os tipos e os escopos para identificar operações que não fazem sentido no programa.</p></div>
+        <div class="empty-state"><span class="empty-mark" aria-hidden="true">?</span><p>A visualização da análise semântica ainda não está disponível nesta interface.</p></div>
+      </div>
+      <div class="output" id="out-tac" role="tabpanel" aria-labelledby="tab-tac" tabindex="0" hidden>
+        <div class="phase-explainer"><span class="phase-label">Etapa 4 · Código intermediário</span><h3>TAC</h3><p>O código de três endereços divide o programa em instruções mais simples, antes da geração do código final.</p></div>
+        <pre id="tac-code">Execute o programa para ver o TAC.</pre>
+      </div>
+      <div class="output" id="out-cpp" role="tabpanel" aria-labelledby="tab-cpp" tabindex="0" hidden>
+        <div class="phase-explainer"><span class="phase-label">Etapa 5 · Geração de código</span><h3>Código C++</h3><p>O programa MiniPar é traduzido para C++. Esse código é compilado para produzir o executável.</p></div>
+        <pre id="cpp-code">Execute o programa para ver o C++.</pre>
+      </div>
+      <div class="output" id="out-exec" role="tabpanel" aria-labelledby="tab-exec" tabindex="0">
+        <div class="phase-explainer execution-intro"><span class="phase-label">Resultado do programa</span><h3>Execução</h3><p>Acompanhe as mensagens da compilação e a saída do seu programa.</p></div>
+        <pre id="terminal-output">Execute o programa para ver a saída.</pre>
+      </div>
     </section>
   </div>
 </main>

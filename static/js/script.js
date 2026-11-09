@@ -3,7 +3,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const source = byId("editor-minipar");
     const editor = window.CodeMirror?.fromTextArea(source, {
         mode: "text/x-c++src", theme: "dracula", lineNumbers: true,
-        indentUnit: 4, lineWrapping: true
+        indentUnit: 4, lineWrapping: true,
+        screenReaderLabel: source.getAttribute("aria-label")
     });
     const getCode = () => editor?.getValue ? editor.getValue() : source.value;
     function setCode(code) {
@@ -16,18 +17,24 @@ document.addEventListener("DOMContentLoaded", () => {
     const run = byId("btn-run");
     const clear = byId("btn-clear");
     const tabs = Array.from(document.querySelectorAll('[role="tab"]'));
+    const executionTab = byId("tab-exec");
+    const results = document.querySelector(".results");
     let spec = null;
+    let hasResults = false;
 
-    function showTab(selected) {
+    function showTab(selected, revealResult = false) {
         for (const tab of tabs) {
             const active = tab === selected;
             tab.setAttribute("aria-selected", String(active));
             tab.tabIndex = active ? 0 : -1;
             byId(tab.getAttribute("aria-controls")).hidden = !active;
         }
+        if (revealResult && window.matchMedia("(max-width: 800px)").matches) {
+            results.scrollIntoView({ block: "nearest" });
+        }
     }
     tabs.forEach((tab, index) => {
-        tab.onclick = () => showTab(tab);
+        tab.onclick = () => showTab(tab, true);
         tab.onkeydown = event => {
             const next = { ArrowRight: (index + 1) % tabs.length,
                 ArrowLeft: (index + tabs.length - 1) % tabs.length,
@@ -39,14 +46,23 @@ document.addEventListener("DOMContentLoaded", () => {
         };
     });
 
-    function status(label) { byId("status").textContent = label; }
-    function lock(value) { run.disabled = clear.disabled = examples.disabled = value; }
-    function resetResults(message) {
-        showTab(tabs[0]);
+    function status(label) {
+        byId("status").textContent = label;
+        byId("status").dataset.state = label === "Erro" ? "error" : "ready";
+    }
+    function lock(value) {
+        run.disabled = clear.disabled = examples.disabled = value;
+        source.readOnly = value;
+        editor?.setOption?.("readOnly", value);
+        results.setAttribute("aria-busy", String(value));
+    }
+    function resetResults(message, selectExecution = true) {
+        if (selectExecution) showTab(executionTab);
+        hasResults = false;
         terminalOutput.textContent = message;
         terminalOutput.classList.remove("error-text");
-        byId("cpp-code").textContent = "Compile o programa para ver o C++.";
-        byId("tac-code").textContent = "Compile o programa para ver o TAC.";
+        byId("cpp-code").textContent = "Execute o programa para ver o C++.";
+        byId("tac-code").textContent = "Execute o programa para ver o TAC.";
     }
     async function post(url, body) {
         const response = await fetch(url, { method: "POST",
@@ -57,14 +73,23 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     function showError(error) {
         status("Erro");
+        showTab(executionTab);
         terminalOutput.classList.add("error-text");
         terminalOutput.textContent = error.message;
     }
 
+    function invalidateResults() {
+        if (!hasResults) return;
+        resetResults("Código alterado. Execute novamente para atualizar os resultados.", false);
+        status("Código alterado");
+    }
+    if (editor?.on) editor.on("change", invalidateResults);
+    else source.addEventListener("input", invalidateResults);
+
     connectSessionMonitor(terminalOutput, label => {
         status(label);
         lock(label === "Monitorando");
-        showTab(tabs[0]);
+        showTab(executionTab);
     });
     fetch("/api/tests").then(res => res.json()).then(data => {
         for (const filename of data.tests) examples.add(new Option(filename, filename));
@@ -176,6 +201,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const data = await post("/api/compile", { code, filename, inputs });
             byId("cpp-code").textContent = data.cpp || "Nenhum código C++ gerado.";
             byId("tac-code").textContent = data.tac || "Nenhum TAC gerado.";
+            hasResults = true;
             if (!data.success) throw new Error(data.stderr || data.error || "Erro na execução.");
             terminalOutput.textContent = data.stdout || "Execução concluída.";
             status("Concluído");
@@ -188,7 +214,7 @@ document.addEventListener("DOMContentLoaded", () => {
         spec = null;
         examples.value = "";
         file.textContent = "ide_temp.minipar";
-        resetResults("Compile o programa para ver a saída.");
+        resetResults("Execute o programa para ver a saída.");
         status("Pronto");
         if (editor?.focus) editor.focus();
         else source.focus();
