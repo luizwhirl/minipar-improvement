@@ -512,6 +512,357 @@ h2 span {
     overflow-wrap: anywhere;
 }
 
+#ast-result,.ast-viewer,.ast-interactive-shell,.ast-layout {
+    min-width: 0;
+}
+
+#out-ast .phase-explainer {
+    margin-bottom: 12px;
+    padding-bottom: 12px;
+}
+
+#out-ast .phase-label {
+    display: none;
+}
+
+#out-ast .phase-explainer h3 {
+    margin-top: 0;
+}
+
+.ast-toolbar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 7px;
+}
+
+.ast-control {
+    min-height: 36px;
+    max-width: 100%;
+    padding: 7px 11px;
+    border: 1px solid #afc2a8;
+    border-radius: 6px;
+    background: #fbfcf7;
+    color: #254d3b;
+    font: 600 12px "Segoe UI",Arial,sans-serif;
+    line-height: 1.4;
+}
+
+.ast-control:hover:not(:disabled) {
+    background: #eaf2e2;
+    border-color: #638461;
+}
+
+.ast-control:disabled {
+    cursor: not-allowed;
+}
+
+.ast-control[data-action=enlarge] {
+    margin-left: auto;
+    border-color: #146951;
+    color: #146951;
+}
+
+.ast-hint,.ast-status {
+    color: #526b52;
+    font-size: 12px;
+    line-height: 1.6;
+}
+
+.ast-hint {
+    margin: 10px 0 12px;
+}
+
+.ast-status {
+    margin: 10px 0 0;
+}
+
+.ast-layout {
+    display: grid;
+    grid-template-columns: minmax(0,1fr);
+    gap: 12px;
+}
+
+.ast-viewport {
+    position: relative;
+    min-width: 0;
+    height: 360px;
+    overflow: hidden;
+    border: 1px solid #c1d0b9;
+    border-radius: 8px;
+    background: radial-gradient(#d9e2d0 .85px,transparent .85px) 0 0 / 18px 18px #f7f9f1;
+    touch-action: none;
+}
+
+.ast-svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+    cursor: grab;
+}
+
+.ast-svg:active {
+    cursor: grabbing;
+}
+
+.ast-link {
+    fill: none;
+    stroke: #6d8873;
+    stroke-width: 1.4;
+    vector-effect: non-scaling-stroke;
+}
+
+.ast-node {
+    cursor: pointer;
+}
+
+.ast-node-box {
+    fill: #fffef9;
+    stroke: #6d8873;
+    stroke-width: 1.4;
+}
+
+.ast-node.is-collapsed .ast-node-box {
+    fill: #edf3e4;
+    stroke-dasharray: 4 3;
+}
+
+.ast-node.is-selected .ast-node-box {
+    fill: #deedcf;
+    stroke: #146951;
+    stroke-width: 2.5;
+}
+
+.ast-node:focus-visible .ast-node-box {
+    stroke: #aa630d;
+    stroke-width: 3;
+}
+
+.ast-node-type {
+    fill: #1a3932;
+    font: 650 12px "Segoe UI",Arial,sans-serif;
+}
+
+.ast-node-summary {
+    fill: #3b5b47;
+    font: 12px var(--mono);
+}
+
+.ast-node-position {
+    fill: #50694f;
+    font: 12px "Segoe UI",Arial,sans-serif;
+}
+
+.ast-node-toggle {
+    fill: #146951;
+    font: 700 15px var(--mono);
+}
+
+.ast-inspector {
+    min-width: 0;
+    max-height: 250px;
+    overflow: auto;
+    border: 1px solid #d2ddc9;
+    border-radius: 8px;
+    padding: 14px;
+    background: #fcfdf9;
+    color: #31513e;
+    font-size: 12px;
+    line-height: 1.6;
+}
+
+.ast-inspector-title {
+    margin: 0;
+    color: #254735;
+    font-size: 14px;
+    overflow-wrap: anywhere;
+}
+
+.ast-properties {
+    display: grid;
+    grid-template-columns: minmax(70px,.4fr) minmax(0,1fr);
+    gap: 8px 12px;
+    margin: 12px 0 0;
+}
+
+.ast-properties dt {
+    font-weight: 650;
+    overflow-wrap: anywhere;
+}
+
+.ast-properties dd {
+    min-width: 0;
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+.ast-inspector .ast-attribute-value {
+    margin: 0;
+    font: 12px/1.6 var(--mono);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.ast-json {
+    margin-top: 16px;
+    padding-top: 13px;
+    border-top: 1px solid #dce4d5;
+}
+
+.ast-json > summary {
+    width: fit-content;
+    max-width: 100%;
+    color: #31573c;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.ast-json > summary:focus-visible {
+    outline: 3px solid #aa630d;
+    outline-offset: 3px;
+}
+
+.ast-json pre {
+    max-height: 320px;
+    overflow: auto;
+    margin-top: 14px;
+    font: 12px/1.65 var(--mono);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.ast-fallback {
+    margin: 0 0 16px;
+    padding: 12px 14px;
+    border: 1px solid #d7bb85;
+    border-radius: 6px;
+    color: #704b1d;
+    background: #fff7e8;
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+.ast-dialog {
+    width: min(1440px,calc(100vw - 32px));
+    max-width: none;
+    height: calc(100dvh - 32px);
+    max-height: none;
+    margin: auto;
+    padding: 0;
+    border: 1px solid #b7c8b0;
+    border-radius: 12px;
+    background: var(--paper);
+    color: var(--ink);
+    overflow: hidden;
+}
+
+.ast-dialog[open] {
+    display: flex;
+    flex-direction: column;
+}
+
+.ast-dialog::backdrop {
+    background: rgb(18 39 34 / 65%);
+}
+
+.ast-dialog-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 14px 18px;
+    border-bottom: 1px solid #ccd8c3;
+    background: #fcfcf7;
+}
+
+.ast-dialog-header h3 {
+    min-width: 0;
+    margin: 0;
+    font-size: 18px;
+    letter-spacing: -.025em;
+}
+
+.ast-dialog-body {
+    flex: 1;
+    min-height: 0;
+    padding: 16px;
+    overflow: auto;
+}
+
+.ast-dialog-body > .ast-interactive-shell {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 440px;
+}
+
+.ast-dialog .ast-layout {
+    flex: 1;
+    min-height: 0;
+    grid-template-columns: minmax(0,1fr) 280px;
+}
+
+.ast-dialog .ast-viewport {
+    height: 100%;
+    min-height: 300px;
+}
+
+.ast-dialog .ast-inspector {
+    height: 100%;
+    max-height: none;
+}
+
+@media(max-width:900px) {
+    .ast-dialog-body > .ast-interactive-shell {
+        height: auto;
+        min-height: 100%;
+    }
+
+    .ast-dialog .ast-layout {
+        flex: initial;
+        grid-template-columns: minmax(0,1fr);
+    }
+
+    .ast-dialog .ast-viewport {
+        height: clamp(300px,55dvh,640px);
+        min-height: 280px;
+    }
+
+    .ast-dialog .ast-inspector {
+        height: auto;
+        max-height: 280px;
+    }
+}
+
+@media(max-width:480px) {
+    .ast-toolbar {
+        gap: 6px;
+    }
+
+    .ast-control {
+        padding: 7px 9px;
+    }
+
+    .ast-viewport {
+        height: 320px;
+    }
+
+    .ast-dialog {
+        width: calc(100vw - 16px);
+        height: calc(100dvh - 16px);
+        border-radius: 8px;
+    }
+
+    .ast-dialog-header {
+        padding: 12px;
+    }
+
+    .ast-dialog-body {
+        padding: 10px;
+    }
+}
+
 .semantic-result {
     font-size: 14px;
     line-height: 1.7;

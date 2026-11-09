@@ -89,14 +89,24 @@ A IDE permite:
 Na interface didática, cada opção da barra analisa o código atual do editor:
 
 - **Tokens:** tipo, texto, linha e coluna dos tokens reconhecidos pelo lexer.
-- **AST:** representação JSON dos nós produzidos pelo parser.
+- **AST:** árvore gráfica dos nós produzidos pelo parser, com zoom, navegação,
+  expansão de ramos e detalhes dos nós; o JSON completo também fica disponível.
 - **Semântica:** resultado da validação e os diagnósticos encontrados.
 - **TAC** e **Código C++:** código gerado sem compilar ou executar o programa.
 
 As análises não solicitam entradas de `input()` nem iniciam sessões de execução.
 Se uma fase anterior falhar, o painel informa onde a análise parou. Alterar o
 código invalida os resultados anteriores; selecionar uma fase novamente analisa
-a nova versão. A árvore gráfica da AST continua sendo uma entrega separada.
+a nova versão.
+
+Na AST, selecione um nó para consultar seu tipo, a linha do código e seus
+atributos. Os ramos podem ser expandidos ou recolhidos, e os controles de zoom e
+ajuste ajudam a navegar em árvores maiores. A visualização pode ser ampliada em
+uma janela própria; o JSON original permanece acessível para consulta.
+
+A árvore utiliza uma cópia local do [D3.js 7.9.0](https://github.com/d3/d3/releases/tag/v7.9.0),
+em `static/vendor/`, sem carregar essa biblioteca de um CDN. Sua licença ISC está
+em `static/vendor/d3-LICENSE.txt`.
 
 **Compilar/Baixar** permanece indisponível enquanto não houver suporte ao download
 do executável. **Executar** mantém a operação atual: compila o programa, executa o
@@ -145,6 +155,12 @@ Para validar isolamento de arquivos e os limites entre sessão HTTP e terminal:
 
 ```bash
 python -m unittest discover -s tests -p "test_*.py" -v
+```
+
+Os testes do modelo visual da AST usam o executor de testes do Node.js:
+
+```bash
+node --test tests/ast_tree_model.test.cjs
 ```
 
 O teste de isolamento exige `g++` no PATH e compila simultaneamente dois pedidos
