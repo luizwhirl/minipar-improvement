@@ -145,7 +145,7 @@ class PhaseAnalysisTests(unittest.TestCase):
     def test_shared_cpp_generator_translates_fork_join_without_creating_artifacts(self):
         sources = {
             "fork": ("func work() { return 42; } seq { fork work(); }",
-                     "__fork([=]() { return work(); });"),
+                     "__fork([=]() mutable { return work(); });"),
             "join": ("func wait_for(task) { var answer = join(task); return answer; } seq { print(1); }",
                      "auto answer = __join(task);"),
         }
@@ -184,7 +184,7 @@ class PhaseAnalysisTests(unittest.TestCase):
         self.assertIn("join task", tac["result"])
         cpp = self.analyze(code, "cpp")
         self.assert_success(cpp)
-        self.assertIn("auto task = __fork([=]() { return double_value(3); });", cpp["result"])
+        self.assertIn("auto task = __fork([=]() mutable { return double_value(3); });", cpp["result"])
         self.assertIn("auto answer = __join(task);", cpp["result"])
 
     def test_invalid_requests_are_rejected_before_starting_the_worker(self):

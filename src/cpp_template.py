@@ -41,7 +41,7 @@ double __as_double(F&& fn) {
 
 template <class F>
 double __fork(F fn) {
-    auto fut = std::async(std::launch::async, [fn]() { return __as_double(fn); }).share();
+    auto fut = std::async(std::launch::async, [fn]() mutable { return __as_double(fn); }).share();
     std::lock_guard<std::mutex> lock(__tasks_mtx);
     __tasks.push_back(fut);
     return static_cast<double>(__tasks.size() - 1);

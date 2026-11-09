@@ -1,4 +1,5 @@
 from __future__ import annotations
+from dataclasses import fields, is_dataclass
 import os
 import subprocess
 import sys
@@ -12,6 +13,18 @@ from ast_nodes import (
     ForkExpr, JoinExpr
 )
 from cpp_template import _CPP_HEADER
+
+
+def unsupported_cpp_nodes(value):
+    """Find unsupported parallel expressions, including standalone statements."""
+    if isinstance(value, (ForkExpr, JoinExpr)):
+        yield value
+    if is_dataclass(value):
+        for field in fields(value):
+            yield from unsupported_cpp_nodes(getattr(value, field.name))
+    elif isinstance(value, list):
+        for item in value:
+            yield from unsupported_cpp_nodes(item)
 
 
 class CppCodeGenerator:
@@ -92,15 +105,6 @@ class CppCodeGenerator:
             idx = self._translate_expression(node.index)
             return f"{obj}[{idx}]"
 
-        # fork f(x): roda a chamada numa thread propria e devolve o numero da tarefa.
-        # [=] copia os valores atuais (ex.: o i do laco), entao cada tarefa recebe o seu.
-        if isinstance(node, ForkExpr):
-            call = self._translate_expression(node.function_call)
-            return f"__fork([=]() {{ return {call}; }})"
-        # join(t): espera a tarefa t terminar e devolve o resultado (double).
-        if isinstance(node, JoinExpr):
-            return f"__join({self._translate_expression(node.task)})"
-
         return "0"
 
     def _has_value_return(self, node: Optional[ASTNode]) -> bool:
@@ -118,8 +122,6 @@ class CppCodeGenerator:
         """Detecta aritmética de ponto flutuante no corpo da função."""
         if node is None:
             return False
-        if isinstance(node, JoinExpr):
-            return True  # join sempre devolve double
         if isinstance(node, BinaryExpr):
             if node.op == "/":
                 return True
@@ -158,7 +160,7 @@ class CppCodeGenerator:
             tgt = self._translate_expression(node.target)
             return f"{indent}{tgt} = {self._translate_expression(node.value)};\n"
         
-        if isinstance(node, (MethodCall, FuncCallExpr, ForkExpr, JoinExpr)):
+        if isinstance(node, (MethodCall, FuncCallExpr)):
             return f"{indent}{self._translate_expression(node)};\n"
         if isinstance(node, ReturnStmt):
             val = self._translate_expression(node.value) if node.value else ""
@@ -239,6 +241,11 @@ class CppCodeGenerator:
 
     def generate_text(self, program: Program) -> str:
         """Translate an AST to C++ without writing files or invoking a compiler."""
+        unsupported = next(unsupported_cpp_nodes(program), None)
+        if unsupported is not None:
+            operator = "fork" if isinstance(unsupported, ForkExpr) else "join"
+            raise NotImplementedError(
+                f"Linha {unsupported.line}: A geração C++ para '{operator}' ainda não está implementada.")
         cpp_code = _CPP_HEADER
         
         for node in program.statements:
