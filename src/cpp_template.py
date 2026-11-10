@@ -10,6 +10,9 @@ _CPP_HEADER = """\
 #include <cmath>
 #include <cstdlib>
 #include <type_traits>
+#include <future>
+#include <mutex>
+#include <deque>
 
 #ifdef _WIN32
   #include <winsock2.h>
@@ -22,6 +25,41 @@ _CPP_HEADER = """\
   #include <unistd.h>
   #define CLOSE_SOCK close
 #endif
+
+// ===== fork / join =====
+// Cada fork vira uma tarefa (std::async, uma thread do sistema) guardada numa
+// lista global. O fork devolve o numero da tarefa (um double), entao ele pode ir
+// para variaveis e listas como qualquer numero. O join espera a tarefa e devolve o resultado.
+static std::deque<std::shared_future<double>> __tasks;
+static std::mutex __tasks_mtx;
+
+template <class F>
+double __as_double(F&& fn) {
+    if constexpr (std::is_void_v<decltype(fn())>) { fn(); return 0.0; }
+    else return static_cast<double>(fn());
+}
+
+template <class F>
+double __fork(F fn) {
+    auto fut = std::async(std::launch::async, [fn]() mutable { return __as_double(fn); }).share();
+    std::lock_guard<std::mutex> lock(__tasks_mtx);
+    __tasks.push_back(fut);
+    return static_cast<double>(__tasks.size() - 1);
+}
+
+inline double __join(double id) {
+    std::shared_future<double> fut;
+    {
+        std::lock_guard<std::mutex> lock(__tasks_mtx);
+        size_t i = static_cast<size_t>(id);
+        if (id < 0 || i >= __tasks.size()) {
+            std::cerr << "[ERRO EXECUCAO] join em tarefa inexistente: " << id << std::endl;
+            std::exit(1);
+        }
+        fut = __tasks[i];
+    }
+    return fut.get();
+}
 
 // Helper para Random nativo
 double random_val() { return (double)rand() / RAND_MAX; }
