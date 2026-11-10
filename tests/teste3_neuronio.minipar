@@ -1,12 +1,14 @@
+# Entradas: valor real de -100 a 100, alvo binario (0 ou 1), taxa de 0.001 a 1.
 class Neuronio {
-    var input_val = 1;
-    var output_desejado = 0;
+    var input_val = 0.0;
+    var output_desejado = 0.0;
     var peso = 0.5;
-    var bias = 1;
+    var bias = 1.0;
     var peso_bias = 0.5;
     var taxa_aprendizado = 0.01;
-    var erro = 999;
+    var erro = 999.0;
     var iteracao = 0;
+    var max_iteracoes = 1000;
 
     func ativacao(soma) {
         if (soma > 0) {
@@ -18,8 +20,11 @@ class Neuronio {
     func treinar() {
         print("==== Teste 3: neuronio simples com classes e objetos ====");
         print("Entrada:", this.input_val, "Saida desejada:", this.output_desejado);
+        print("Taxa de aprendizado:", this.taxa_aprendizado);
+        this.erro = 999.0;
+        this.iteracao = 0;
 
-        while (this.erro != 0) {
+        while (this.erro != 0 && this.iteracao < this.max_iteracoes) {
             this.iteracao = this.iteracao + 1;
 
             var soma = (this.input_val * this.peso) + (this.bias * this.peso_bias);
@@ -39,7 +44,11 @@ class Neuronio {
             }
         }
 
-        print("Neuronio aprendeu dinamicamente.");
+        if (this.erro == 0) {
+            print("Neuronio aprendeu dinamicamente.");
+        } else {
+            print("Treinamento encerrado no limite de iteracoes sem convergir.");
+        }
         print("Iteracoes totais:", this.iteracao);
         print("Peso final:", this.peso);
         print("Peso bias final:", this.peso_bias);
@@ -48,6 +57,17 @@ class Neuronio {
 }
 
 seq {
-    var neuronio = new Neuronio();
-    neuronio.treinar();
+    var entrada = to_number(input("Entrada do neuronio (real de -100 a 100): "));
+    var alvo = to_number(input("Saida desejada (0 ou 1): "));
+    var taxa = to_number(input("Taxa de aprendizado (0.001 a 1): "));
+
+    if (entrada >= -100 && entrada <= 100 && (alvo == 0 || alvo == 1) && taxa >= 0.001 && taxa <= 1) {
+        var neuronio = new Neuronio();
+        neuronio.input_val = entrada;
+        neuronio.output_desejado = alvo;
+        neuronio.taxa_aprendizado = taxa;
+        neuronio.treinar();
+    } else {
+        print("Entrada invalida: valor entre -100 e 100, alvo 0 ou 1 e taxa entre 0.001 e 1.");
+    }
 }

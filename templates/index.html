@@ -27,12 +27,12 @@
       </div>
       <div class="compile-actions">
         <div class="action-group">
-          <button class="download" id="btn-download" type="button" disabled aria-describedby="download-help">Compilar e baixar</button>
-          <p class="action-help" id="download-help">O download do executável ainda não está disponível.</p>
+          <button class="download" id="btn-download" type="button" aria-describedby="download-help">Compilar e baixar</button>
+          <p class="action-help" id="download-help">Gera o executável sem executar o programa.</p>
         </div>
         <div class="action-group">
           <button class="run" id="btn-run" type="button" aria-describedby="run-help"><span aria-hidden="true">▶</span> Executar</button>
-          <p class="action-help" id="run-help">Compila o programa antes de executar.</p>
+          <p class="action-help" id="run-help">Compila e mostra a saída durante a execução.</p>
         </div>
       </div>
     </div>
@@ -48,12 +48,13 @@
   <div class="workspace">
     <section class="panel source"><div class="panel-title"><h2><span aria-hidden="true">❮❯</span> Código-fonte</h2><button id="btn-clear" type="button">Novo arquivo</button></div>
       <div class="filebar"><i></i><span id="current-file">ide_temp.minipar</span></div>
-      <div class="editing"><textarea spellcheck="false" aria-label="Código MiniPar" id="editor-minipar"># Soma dos números de 1 a 5
+      <div class="editing"><textarea spellcheck="false" aria-label="Código MiniPar" id="editor-minipar"># Soma dos números de 1 até o limite informado
 seq {
+    var limite = to_number(input("Somar de 1 ate qual numero? "));
     var numero = 1;
     var soma = 0;
 
-    while (numero &lt;= 5) {
+    while (numero &lt;= limite) {
         soma = soma + numero;
         numero = numero + 1;
     }
@@ -94,7 +95,18 @@ seq {
         <pre class="phase-result" id="cpp-code" hidden></pre>
       </div>
       <div class="output" id="out-exec" role="tabpanel" aria-labelledby="tab-exec" tabindex="0">
-        <div class="phase-explainer execution-intro"><span class="phase-label">Resultado do programa</span><h3>Execução</h3><p>Acompanhe as mensagens da compilação e a saída do seu programa.</p></div>
+        <div class="phase-explainer execution-intro"><span class="phase-label">Resultado do programa</span><h3>Execução</h3><p>Acompanhe as mensagens da compilação e a saída do seu programa em tempo real.</p></div>
+        <details class="execution-inputs" id="execution-inputs" open>
+          <summary>Entradas do programa</summary>
+          <label for="program-inputs">Valores para input(), uma linha por leitura</label>
+          <p id="inputs-help">Informe o limite da soma antes de executar, por exemplo: 5.</p>
+          <textarea id="program-inputs" rows="3" spellcheck="false" aria-describedby="inputs-help" placeholder="Exemplo:&#10;5"></textarea>
+        </details>
+        <a class="executable-link" id="executable-link" hidden download>Baixar executável</a>
+        <details class="execution-log" id="compiler-log" hidden>
+          <summary>Mensagens da compilação</summary>
+          <pre id="compiler-output"></pre>
+        </details>
         <pre id="terminal-output">Execute o programa para ver a saída.</pre>
       </div>
     </section>
@@ -106,5 +118,6 @@ seq {
 <script src="/static/js/ast-tree-model.js"></script>
 <script src="/static/js/ast-viewer.js"></script>
 <script src="/static/js/session-monitor.js"></script>
+<script src="/static/js/execution-stream.js"></script>
 <script src="/static/js/script.js"></script>
 </body></html>

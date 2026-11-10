@@ -28,6 +28,11 @@ def compile_file(source_path: str, output_name: str, output_dir: str = None) -> 
     print("[Fase 1] Analise Lexica e Sintatica...")
     lexer  = Lexer(source_code)
     tokens = lexer.tokenize()
+    if lexer.has_errors:
+        for diagnostic in lexer.errors:
+            print(diagnostic, file=sys.stderr)
+        print("[ERRO] Falha na Analise Lexica. Compilacao abortada.", file=sys.stderr)
+        return False
 
     parser  = Parser(tokens)
     program = parser.parse()

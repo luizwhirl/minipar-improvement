@@ -20,7 +20,7 @@ class WorkspaceTests(unittest.TestCase):
     def test_example_run_tabs_and_new_file(self):
         # Keep the page loading until its real asynchronous controls have finished.
         finished = threading.Event()
-        actions = """
+        actions = r"""
         document.addEventListener("DOMContentLoaded", async () => {
             const el = id => document.getElementById(id);
             const wait = async check => {
@@ -36,6 +36,7 @@ class WorkspaceTests(unittest.TestCase):
                 el("examples").dispatchEvent(new Event("change"));
                 await wait(() => !el("btn-run").disabled);
                 if (!el("editor-minipar").value.includes("Fatorial")) throw Error("Example missing");
+                el("program-inputs").value = "5\n8";
                 el("btn-run").click();
                 await wait(() => !el("btn-run").disabled);
                 if (!el("terminal-output").textContent.includes("120")) throw Error(el("terminal-output").textContent);
