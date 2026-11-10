@@ -57,25 +57,6 @@ body {
     font-size: 14px;
 }
 
-.legacy-link {
-    margin-left: auto;
-    color: #e3efdf;
-    font-size: 13px;
-    text-decoration: none;
-    border: 1px solid #607270;
-    border-radius: 6px;
-    padding: 8px 11px;
-}
-
-.legacy-link:hover {
-    background: #294443;
-    color: white;
-}
-
-.legacy-link span {
-    margin-left: 5px;
-}
-
 .toolbar,.actions,.panel-title,.tabs,.foot,.filebar,h2 {
     display: flex;
     align-items: center;
@@ -995,8 +976,4 @@ h2 span {
         font-size: 22px;
     }
 
-    .legacy-link {
-        font-size: 11px;
-        padding: 7px 8px;
-    }
 }
