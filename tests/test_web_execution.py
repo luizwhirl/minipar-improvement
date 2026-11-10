@@ -87,6 +87,32 @@ class ExecutionFixture(unittest.TestCase):
 
 @unittest.skipUnless(shutil.which("g++"), "Requires g++ on PATH")
 class RealWebExecutionTests(ExecutionFixture):
+    def test_fork_join_builds_and_executes_through_the_web_endpoints(self):
+        payload = {
+            "code": 'func double_value(value) { return value * 2; } '
+                    'seq { var task = fork double_value(21); '
+                    'print("FORK_JOIN_RESULT", join(task)); }',
+            "filename": "fork_join.minipar",
+        }
+        built = self.client.post("/api/build", json=payload)
+        self.assertEqual(built.status_code, 200)
+        artifact = built.get_json()
+        self.assertTrue(artifact["success"], artifact)
+        self.assertTrue(artifact["download_url"])
+        self.assertIn("__fork(", artifact["cpp"])
+
+        response = self.client.post("/api/execute", json=payload, buffered=False)
+        try:
+            self.assertEqual(response.status_code, 200)
+            events = list(ndjson_events(response))
+        finally:
+            response.close()
+        complete = self.assert_complete(events, True)
+        self.assertEqual(complete["exit_code"], 0)
+        stdout = "".join(event["text"] for event in events
+                         if event["type"] == "output" and event["stream"] == "stdout")
+        self.assertRegex(stdout, r"FORK_JOIN_RESULT\s+42(?:\.0+)?(?:\s|$)")
+
     def test_build_downloads_the_real_binary_without_running_it_or_collecting_input(self):
         code = 'seq { var answer = input("BUILD_MUST_NOT_PROMPT"); print("BUILD_MUST_NOT_RUN", answer); }'
         response = self.client.post("/api/build", json={"code": code, "filename": "download.minipar"})

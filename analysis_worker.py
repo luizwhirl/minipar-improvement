@@ -11,8 +11,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
 
-from ast_nodes import ForkExpr
-from codegen import CppCodeGenerator, unsupported_cpp_nodes
+from codegen import CppCodeGenerator
 from lexer import Lexer, TokenType
 from parser import Parser
 from semantic import SemanticAnalyzer
@@ -110,11 +109,6 @@ def analyze(code: str, phase: str):
             if phase == "tac":
                 return response(phase, TACGenerator().generate_text(program))
 
-            errors = [diagnostic("cpp",
-                f"A geração C++ para '{'fork' if isinstance(node, ForkExpr) else 'join'}' ainda não está implementada.",
-                node.line) for node in unsupported_cpp_nodes(program)]
-            if errors:
-                return response(phase, diagnostics=errors, failed_phase="cpp")
             return response(phase, CppCodeGenerator().generate_text(program))
         except SystemExit:
             errors = captured_diagnostics(current_phase, stderr.getvalue(),

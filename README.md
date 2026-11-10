@@ -131,7 +131,7 @@ Erros de compilação, término com código diferente de zero e estouro do tempo
 limite são apresentados no painel. Os logs técnicos ficam em **Mensagens da
 compilação**, que se abre automaticamente quando a compilação falha.
 
-Os programas de exemplo recebem seus dados por `input()`. Na Web, preencha as
+Os onze exemplos interativos abaixo recebem seus dados por `input()`. Na Web, preencha as
 linhas na ordem indicada e selecione **Executar**; no Terminal, responda aos
 prompts do próprio programa. O Teste 2 mantém fatorial e Fibonacci em paralelo,
 agora com duas entradas: número do fatorial e quantidade de termos. Por exemplo,
@@ -151,6 +151,10 @@ as linhas `5` e `8` produzem fatorial `120` e a sequência
 | Tapete de Sierpinski | Tamanho: 3, 9, 27 ou 81 |
 | Fractal ASCII | Quantidade inteira de linhas do desenho (1–64) |
 | Controles da BNF | Nome, limite do laço (0–1000), quantidade de tentativas (1–1000) |
+
+Os testes oficiais 8, 9 e 10, adicionados no MINIP-18, usam `fork`/`join` e
+mantêm os valores de referência definidos em seus fontes, sem leitura por
+`input()`. Seus resultados esperados estão em `tests/expected_results/`.
 
 As entradas dos algoritmos são configuráveis; a tabela-verdade do XOR, o
 catálogo de produtos e os valores de inicialização continuam definindo os
@@ -183,10 +187,9 @@ A API de fases usa `POST /api/analyze` com JSON no formato
 `failed_phase`, `result` e `diagnostics`. Cada análise é executada em um processo
 isolado, com limite de 15 segundos, sem gerar arquivos ou invocar `g++`.
 
-Enquanto a geração C++ de `fork` e `join` não estiver implementada, a opção
-**Código C++** informa essa limitação para programas que utilizam esses operadores.
-Tokens, AST, Semântica e TAC continuam disponíveis para esses programas quando
-as respectivas análises forem válidas.
+O gerador C++ traduz `fork`/`join` para tarefas assíncronas e permite consultar
+o código gerado, compilar e executar esses programas pela Web e pelo terminal.
+O `join` atual retorna resultados numéricos; tarefas sem retorno produzem zero.
 
 ### 2. Execução Direta (CLI)
 

@@ -28,9 +28,11 @@ def compile_file(source_path: str, output_name: str, output_dir: str = None) -> 
     print("[Fase 1] Analise Lexica e Sintatica...")
     lexer  = Lexer(source_code)
     tokens = lexer.tokenize()
+
+    # Para a compilacao se o lexer achou erros (caractere invalido, texto sem fechar...).
     if lexer.has_errors:
-        for diagnostic in lexer.errors:
-            print(diagnostic, file=sys.stderr)
+        for error in lexer.errors:
+            print(error, file=sys.stderr)
         print("[ERRO] Falha na Analise Lexica. Compilacao abortada.", file=sys.stderr)
         return False
 

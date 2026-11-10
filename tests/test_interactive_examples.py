@@ -1,4 +1,4 @@
-"""Compile every example and verify its algorithm uses different keyboard data."""
+"""Verify keyboard data in interactive examples and account for official fixtures."""
 from pathlib import Path
 from contextlib import ExitStack
 import re
@@ -16,6 +16,13 @@ from run_artifacts import executable_path
 
 ROOT = Path(__file__).resolve().parents[1]
 HISTORY = ["1", "0", "0", "0", "0", "1", "0", "0", "0", "1", "0", "0", "1", "0", "0", "0"]
+# These official scenarios retain their prescribed constants. Their full
+# executable output is covered in test_official_fork_join_examples.py.
+OFFICIAL_FIXED_EXAMPLES = {
+    "teste8_avaliacao_4_nucleos.minipar",
+    "teste9_avaliacao_5_nucleos_mandelbrot.minipar",
+    "teste10_avaliacao_6_nucleos_2_fractais.minipar",
+}
 
 # Each variant describes real execution input and a result of the computation,
 # rather than merely requiring the program to echo the supplied values.
@@ -187,9 +194,16 @@ for example_filename in CASES:
 
 
 class InteractiveTACRegressionTests(unittest.TestCase):
-    def test_every_selectable_example_has_two_keyboard_input_profiles(self):
-        self.assertEqual({path.name for path in (ROOT / "tests").glob("*.minipar")}, set(CASES),
-                         "Every selectable example must have keyboard-input integration coverage")
+    def test_every_selectable_example_has_execution_coverage(self):
+        self.assertTrue(set(CASES).isdisjoint(OFFICIAL_FIXED_EXAMPLES))
+        self.assertEqual(
+            {path.name for path in (ROOT / "tests").glob("*.minipar")},
+            set(CASES) | OFFICIAL_FIXED_EXAMPLES,
+            "Each selectable example needs interactive or official-scenario execution coverage",
+        )
+        for filename, profiles in CASES.items():
+            with self.subTest(example=filename):
+                self.assertGreaterEqual(len(profiles), 2)
 
     def test_iterative_quicksort_tac_is_generated_from_the_current_program(self):
         source = (ROOT / "tests/teste7_quicksort_iterativo_tac.minipar").read_text(encoding="utf-8")
