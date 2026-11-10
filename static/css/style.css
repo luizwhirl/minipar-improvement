@@ -57,6 +57,25 @@ body {
     font-size: 14px;
 }
 
+.legacy-link {
+    margin-left: auto;
+    color: #e3efdf;
+    font-size: 13px;
+    text-decoration: none;
+    border: 1px solid #607270;
+    border-radius: 6px;
+    padding: 8px 11px;
+}
+
+.legacy-link:hover {
+    background: #294443;
+    color: white;
+}
+
+.legacy-link span {
+    margin-left: 5px;
+}
+
 .toolbar,.actions,.panel-title,.tabs,.foot,.filebar,h2 {
     display: flex;
     align-items: center;
@@ -182,6 +201,88 @@ button:disabled,select:disabled {
 .download:disabled {
     cursor: not-allowed;
     opacity: .8;
+}
+
+.download:hover:not(:disabled) {
+    background: #dfe8d8;
+    border-color: #72866a;
+}
+
+.execution-inputs {
+    margin: 0 0 18px;
+    padding: 11px 13px;
+    border: 1px solid #d7dfcf;
+    border-radius: 6px;
+    background: #f7f9f2;
+    font-size: 13px;
+}
+
+.execution-inputs summary {
+    cursor: pointer;
+    font-weight: 600;
+    color: #36533b;
+}
+
+.execution-inputs label {
+    display: block;
+    margin-top: 13px;
+}
+
+.execution-inputs p {
+    margin: 7px 0 10px;
+    color: #59685f;
+    line-height: 1.5;
+    font-size: 12px;
+}
+
+.execution-inputs textarea {
+    display: block;
+    box-sizing: border-box;
+    width: 100%;
+    resize: vertical;
+    min-height: 74px;
+    padding: 9px;
+    border: 1px solid #abb8aa;
+    border-radius: 4px;
+    background: #fff;
+    color: var(--ink);
+    font: 13px/1.6 var(--mono);
+}
+
+.execution-inputs textarea:disabled {
+    background: #eef0ea;
+    color: #687265;
+}
+
+.executable-link {
+    display: inline-block;
+    margin-bottom: 15px;
+    color: var(--teal);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.executable-link[hidden] { display: none; }
+
+.execution-log {
+    margin: 0 0 16px;
+    padding: 11px 13px;
+    border: 1px solid #d7dfcf;
+    border-radius: 6px;
+    background: #f7f9f2;
+}
+
+.execution-log summary {
+    cursor: pointer;
+    color: #36533b;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.output .execution-log pre {
+    margin-top: 12px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
 }
 
 .action-help {
@@ -976,4 +1077,8 @@ h2 span {
         font-size: 22px;
     }
 
+    .legacy-link {
+        font-size: 11px;
+        padding: 7px 8px;
+    }
 }

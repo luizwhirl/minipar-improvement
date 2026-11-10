@@ -10,6 +10,8 @@ _CPP_HEADER = """\
 #include <cmath>
 #include <cstdlib>
 #include <type_traits>
+#include <stdexcept>
+#include <algorithm>
 #include <future>
 #include <mutex>
 #include <deque>
@@ -124,8 +126,12 @@ template<typename T>
 std::string __to_string(const T& val) {
     if constexpr (std::is_constructible_v<std::string, T>) {
         return std::string(val);
-    } else {
+    } else if constexpr (std::is_arithmetic_v<T>) {
         return std::to_string(val);
+    } else {
+        std::ostringstream text;
+        text << val;
+        return text.str();
     }
 }
 
@@ -140,49 +146,88 @@ public:
     std::string ip;
     int port;
 
+private:
+    int listener = -1;
+    std::mutex receiving;
+
+public:
+
     MiniParChannel(std::string ip, int port) : ip(ip), port(port) {}
+
+    ~MiniParChannel() {
+        if (listener >= 0) CLOSE_SOCK(listener);
+    }
 
     void sendData(std::string msg) {
         int sock = socket(AF_INET, SOCK_STREAM, 0);
-        if (sock < 0) return;
+        if (sock < 0) throw std::runtime_error("Falha ao abrir o canal de envio.");
         struct sockaddr_in serv_addr;
         serv_addr.sin_family = AF_INET;
         serv_addr.sin_port = htons(port);
         inet_pton(AF_INET, ip.c_str(), &serv_addr.sin_addr);
         
+        bool connected = false;
         for(int i=0; i<50; i++) {
             if (connect(sock, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) >= 0) {
-                send(sock, msg.c_str(), msg.length(), 0);
+                connected = true;
                 break;
             }
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
         }
+        if (!connected) {
+            CLOSE_SOCK(sock);
+            throw std::runtime_error("Nao foi possivel conectar ao canal de comunicacao.");
+        }
+        size_t offset = 0;
+        while (offset < msg.size()) {
+            int count = send(sock, msg.data() + offset,
+                static_cast<int>(std::min(msg.size() - offset, size_t(4096))), 0);
+            if (count <= 0) {
+                CLOSE_SOCK(sock);
+                throw std::runtime_error("Falha ao enviar a mensagem completa pelo canal.");
+            }
+            offset += count;
+        }
+        // Closing the sending connection frames one complete message, as in
+        // the original channel protocol, including an empty string.
         CLOSE_SOCK(sock);
     }
 
     std::string receiveData() {
-        int server_fd = socket(AF_INET, SOCK_STREAM, 0);
-        if (server_fd < 0) return "";
-        int opt = 1;
-        setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, (const char*)&opt, sizeof(opt));
+        std::lock_guard<std::mutex> lock(receiving);
+        // One listener belongs to the channel for its entire lifetime. Closing
+        // and recreating it on every receive could discard connections queued
+        // for the following message while the previous message was consumed.
+        if (listener < 0) {
+            listener = socket(AF_INET, SOCK_STREAM, 0);
+            if (listener < 0) throw std::runtime_error("Falha ao abrir o canal de recepcao.");
+            int opt = 1;
+            setsockopt(listener, SOL_SOCKET, SO_REUSEADDR, (const char*)&opt, sizeof(opt));
+            struct sockaddr_in address;
+            address.sin_family = AF_INET;
+            address.sin_addr.s_addr = INADDR_ANY;
+            address.sin_port = htons(port);
+            if (bind(listener, (struct sockaddr*)&address, sizeof(address)) < 0
+                    || listen(listener, SOMAXCONN) < 0) {
+                CLOSE_SOCK(listener);
+                listener = -1;
+                throw std::runtime_error("Nao foi possivel escutar na porta do canal.");
+            }
+        }
+        int new_socket = accept(listener, nullptr, nullptr);
+        if (new_socket < 0) throw std::runtime_error("Falha ao aceitar a conexao do canal.");
         
-        struct sockaddr_in address;
-        address.sin_family = AF_INET;
-        address.sin_addr.s_addr = INADDR_ANY;
-        address.sin_port = htons(port);
-        
-        if (bind(server_fd, (struct sockaddr*)&address, sizeof(address)) < 0) { CLOSE_SOCK(server_fd); return ""; }
-        if (listen(server_fd, 3) < 0) { CLOSE_SOCK(server_fd); return ""; }
-        
-        int new_socket = accept(server_fd, nullptr, nullptr);
-        if (new_socket < 0) { CLOSE_SOCK(server_fd); return ""; }
-        
-        char buffer[4096] = {0};
-        recv(new_socket, buffer, 4096, 0);
-        std::string result(buffer);
-        
+        char buffer[4096];
+        std::string result;
+        int count;
+        while ((count = recv(new_socket, buffer, sizeof(buffer), 0)) > 0) {
+            result.append(buffer, count);
+        }
+        if (count < 0) {
+            CLOSE_SOCK(new_socket);
+            throw std::runtime_error("Falha ao receber a mensagem completa pelo canal.");
+        }
         CLOSE_SOCK(new_socket);
-        CLOSE_SOCK(server_fd);
         return result;
     }
 };

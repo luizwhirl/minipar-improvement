@@ -1,9 +1,11 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, Response, stream_with_context, send_file, url_for, abort
 import subprocess
 import os
 import sys
 import glob
 import json
+from pathlib import Path
+import web_execution
 from run_artifacts import create_run_dir, executable_path
 
 from test_orchestrator import (
@@ -23,6 +25,8 @@ from test_orchestrator import (
 )
 
 app = Flask(__name__)
+app.config.update(WEB_COMPILE_TIMEOUT=15, WEB_EXECUTE_TIMEOUT=30, WEB_OUTPUT_LIMIT=2 * 1024 * 1024)
+BUILD_DOWNLOADS = web_execution.DownloadRegistry()
 
 # Configuração de Diretórios
 TESTS_DIR = 'tests'
@@ -35,6 +39,10 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 @app.route('/')
 def index():
     return render_template('index.html')
+
+@app.route('/legacy', methods=['GET'])
+def legacy():
+    return render_template('legacy.html')
 
 @app.route('/api/tests', methods=['GET'])
 def get_tests():
@@ -163,12 +171,221 @@ def analyze_phase():
         return jsonify({"error": "Não foi possível concluir a análise do código."}), 500
 
 
+def _compiler_command(run):
+    return [sys.executable, "-X", "utf8", "-u", "-B", os.path.join(app.root_path, "main.py"),
+            str(run.source), run.stem, "--output-dir", str(run.directory)]
+
+
+def _process_failure(result, phase):
+    if result.timed_out:
+        return f"Tempo limite de {phase} excedido."
+    if result.output_limited:
+        return "O programa excedeu o limite de saída permitido."
+    if result.exit_code != 0:
+        return f"A {phase} terminou com código de saída {result.exit_code}."
+    return None
+
+
+def _download_for(run):
+    token, filename = BUILD_DOWNLOADS.register(run)
+    return url_for("download_build", run_id=token, filename=filename)
+
+
+class _ExecutionSessionGuard:
+    """Associate writes only with this owner, source and session generation."""
+    def __init__(self, code, filename):
+        self.code = code
+        self.filename = filename
+        self.source = Path(TESTS_DIR) / filename
+        self.created_at = None
+        try:
+            session = _load_session() if self._source_matches() else None
+            if self._owns(session):
+                self.created_at = session.get("created_at")
+        except (OSError, UnicodeError, ValueError):
+            pass
+
+    def _source_matches(self):
+        return (isinstance(self.code, str) and self.source.is_file()
+            and self.source.read_text(encoding="utf-8").replace("\r\n", "\n")
+                == self.code.replace("\r\n", "\n"))
+
+    def _owns(self, session):
+        return (isinstance(session, dict)
+            and session.get("initiator_terminal") == get_terminal_id()
+            and session.get("test_file") == self.filename
+            and session.get("status") not in ("completed", "cancelled"))
+
+    def _current(self):
+        if self.created_at is None or not self._source_matches():
+            return None
+        session = _load_session()
+        if self._owns(session) and session.get("created_at") == self.created_at:
+            return session
+        return None
+
+    def call(self, function, *args, **kwargs):
+        try:
+            if self._current() is not None:
+                function(*args, **kwargs)
+        except (OSError, UnicodeError, ValueError):
+            app.logger.warning("Não foi possível atualizar a sessão da execução.")
+
+    def cancel(self, message):
+        try:
+            session = self._current()
+            if session is not None:
+                session.update(status="cancelled", phase="cancelled", phase_message=message)
+                _save_session(session)
+        except (OSError, UnicodeError, ValueError):
+            app.logger.warning("Não foi possível encerrar a sessão da execução.")
+
+
+@app.route('/api/build', methods=['POST'])
+def build_program():
+    """Compile and offer this build's binary without executing or changing sessions."""
+    try:
+        code, filename, _ = web_execution.validate_source(request.get_json(silent=True))
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+    try:
+        run = web_execution.prepare_run(code, filename, OUTPUT_DIR)
+        result = web_execution.run_capture(_compiler_command(run), cwd=app.root_path,
+            timeout=app.config["WEB_COMPILE_TIMEOUT"], output_limit=app.config["WEB_OUTPUT_LIMIT"])
+        failure = _process_failure(result, "compilação")
+        if not failure and not run.executable.is_file():
+            failure = "O compilador não produziu um executável."
+        success = failure is None
+        artifacts = web_execution.read_artifacts(run) if success else {"cpp": "", "tac": ""}
+        return jsonify({"success": success, "stdout": result.stdout,
+            "stderr": result.stderr + (("\n" if result.stderr else "") + failure if failure else ""),
+            **artifacts, "download_url": _download_for(run) if success else None,
+            "filename": run.executable.name})
+    except Exception:
+        app.logger.exception("Falha na compilação para download")
+        return jsonify({"success": False, "stdout": "", "stderr": "Não foi possível compilar o programa.",
+                        "cpp": "", "tac": "", "download_url": None, "filename": None}), 500
+
+
+@app.route('/api/download/<run_id>/<filename>', methods=['GET'])
+def download_build(run_id, filename):
+    path = BUILD_DOWNLOADS.lookup(run_id, filename, OUTPUT_DIR)
+    if path is None:
+        abort(404)
+    return send_file(path, as_attachment=True, download_name=filename,
+                     mimetype="application/octet-stream", max_age=0)
+
+
+@app.route('/api/execute', methods=['POST'])
+def execute_program():
+    """Compile and stream decoded output from the current program."""
+    try:
+        code, filename, inputs = web_execution.validate_source(request.get_json(silent=True), with_inputs=True)
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+
+    def events():
+        run = None
+        artifacts = {"cpp": "", "tac": ""}
+        stdout, stderr = "", ""
+        exit_code = None
+        success = False
+        finished = False
+        session = _ExecutionSessionGuard(code, filename)
+        session_call = session.call
+        cancel_session = session.cancel
+
+        def ndjson(event):
+            return json.dumps(event, ensure_ascii=False) + "\n"
+
+        try:
+            yield ndjson({"type": "phase", "phase": "compiling", "message": "Compilando código MiniPar..."})
+            run = web_execution.prepare_run(code, filename, OUTPUT_DIR)
+            session_call(set_session_phase, "compiling", "Compilando código MiniPar...", percent=60)
+            session_call(append_session_log, "Compilação iniciada via IDE Web.")
+            iterator = web_execution.iter_process(_compiler_command(run), cwd=app.root_path,
+                timeout=app.config["WEB_COMPILE_TIMEOUT"], output_limit=app.config["WEB_OUTPUT_LIMIT"])
+            try:
+                while True:
+                    try:
+                        event = next(iterator)
+                    except StopIteration as done:
+                        compilation = done.value
+                        break
+                    yield ndjson(event)
+            finally:
+                iterator.close()
+            stdout, stderr = compilation.stdout, compilation.stderr
+            exit_code = compilation.exit_code
+            failure = _process_failure(compilation, "compilação")
+            if not failure and not run.executable.is_file():
+                failure = "O compilador não produziu um executável."
+            if failure:
+                stderr += ("\n" if stderr else "") + failure
+                yield ndjson({"type": "error", "message": failure, "phase": "compiling"})
+            else:
+                artifacts = web_execution.read_artifacts(run)
+                yield ndjson({"type": "phase", "phase": "executing", "message": "Executando o programa..."})
+                session_call(set_session_phase, "executing", "Executando o programa...", percent=90)
+                session_call(append_session_log, "Compilação concluída — executando binário.")
+                iterator = web_execution.iter_process([str(run.executable)], cwd=app.root_path,
+                    timeout=app.config["WEB_EXECUTE_TIMEOUT"],
+                    stdin_data="\n".join(inputs) + "\n" if inputs else None,
+                    output_limit=app.config["WEB_OUTPUT_LIMIT"])
+                try:
+                    while True:
+                        try:
+                            event = next(iterator)
+                        except StopIteration as done:
+                            execution = done.value
+                            break
+                        yield ndjson(event)
+                finally:
+                    iterator.close()
+                stdout += execution.stdout
+                stderr += execution.stderr
+                exit_code = execution.exit_code
+                failure = _process_failure(execution, "execução")
+                success = failure is None
+                session_call(record_execution_output, execution.stdout)
+                if failure:
+                    stderr += ("\n" if stderr else "") + failure
+                    yield ndjson({"type": "error", "message": failure, "phase": "executing"})
+                if success:
+                    session_call(finalize_test_execution, str(session.source), stdout)
+            if not success:
+                cancel_session("Execução não concluída.")
+            finished = True
+            yield ndjson({"type": "complete", "success": success, "exit_code": exit_code,
+                "stdout": stdout, "stderr": stderr, **artifacts,
+                "download_url": _download_for(run) if success else None,
+                "filename": run.executable.name})
+        except GeneratorExit:
+            raise
+        except Exception:
+            app.logger.exception("Falha na execução Web")
+            message = "Não foi possível concluir a execução do programa."
+            cancel_session(message)
+            yield ndjson({"type": "error", "message": message})
+            finished = True
+            yield ndjson({"type": "complete", "success": False, "exit_code": exit_code,
+                "stdout": stdout, "stderr": message, **artifacts,
+                "download_url": None, "filename": run.executable.name if run else None})
+        finally:
+            if not finished:
+                cancel_session("Execução interrompida.")
+
+    return Response(stream_with_context(events()), mimetype="application/x-ndjson",
+                    headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"})
+
+
 @app.route('/api/compile', methods=['POST'])
 def compile_code():
     data = request.json
     code = data.get('code')
     filename = os.path.basename(data.get('filename', 'ide_temp.minipar'))
     user_inputs = data.get('inputs', [])
+    session = _ExecutionSessionGuard(code, filename)
     
     # Salva o código recebido da IDE em um arquivo temporário
     output_dir = create_run_dir(OUTPUT_DIR)
@@ -182,8 +399,8 @@ def compile_code():
     stdin_lines = user_inputs  # valores coletados pela IDE para input() no .minipar
     
     try:
-        set_session_phase("compiling", "Compilando código MiniPar...", percent=60)
-        append_session_log("Compilação iniciada via IDE Web.")
+        session.call(set_session_phase, "compiling", "Compilando código MiniPar...", percent=60)
+        session.call(append_session_log, "Compilação iniciada via IDE Web.")
         # ==========================================
         # 1. FASE DE COMPILAÇÃO (Gera TAC e C++)
         # ==========================================
@@ -206,13 +423,13 @@ def compile_code():
         # 2. FASE DE EXECUÇÃO (Roda o Binário C++)
         # ==========================================
         if success:
-            set_session_phase("compiling", "Compilação concluída.", percent=80)
-            append_session_log("Compilação concluída — executando binário.")
+            session.call(set_session_phase, "compiling", "Compilação concluída.", percent=80)
+            session.call(append_session_log, "Compilação concluída — executando binário.")
             exe_path = executable_path(output_dir, base_name)
             
             if os.path.exists(exe_path):
                 full_output += f"\n--- Executando {base_name} ---\n"
-                set_session_phase("executing", f"Executando {base_name}...", percent=90)
+                session.call(set_session_phase, "executing", f"Executando {base_name}...", percent=90)
                 try:
                     stdin_data = None
                     if stdin_lines:
@@ -227,7 +444,10 @@ def compile_code():
                     full_output += exe_proc.stdout
                     if exe_proc.stderr:
                         full_output += "\n[ERRO NA EXECUÇÃO]:\n" + exe_proc.stderr
-                    record_execution_output(exe_proc.stdout or "")
+                    session.call(record_execution_output, exe_proc.stdout or "")
+                    if exe_proc.returncode != 0:
+                        full_output += f"\n[ERRO] Programa encerrado com código de saída {exe_proc.returncode}."
+                        success = False
                 except subprocess.TimeoutExpired:
                     full_output += "\n[ERRO] Tempo limite de execução excedido (O programa entrou em loop infinito ou aguarda entrada de dados do usuário?)."
                     success = False
@@ -237,10 +457,14 @@ def compile_code():
                 
                 full_output += "\n" + "-" * 40
 
-                if filename.endswith('.minipar'):
-                    test_source = os.path.join(TESTS_DIR, filename)
-                    if os.path.exists(test_source):
-                        finalize_test_execution(test_source, full_output)
+                if success:
+                    session.call(finalize_test_execution, str(session.source), full_output)
+            else:
+                full_output += "\n[ERRO] O compilador não produziu um executável."
+                success = False
+
+        if not success:
+            session.cancel("Compilação ou execução não concluída.")
         
         # ==========================================
         # 3. COLETA DOS ARQUIVOS GERADOS
@@ -269,8 +493,10 @@ def compile_code():
         })
         
     except subprocess.TimeoutExpired:
+        session.cancel("Tempo limite do compilador excedido.")
         return jsonify({"error": "Tempo limite do compilador excedido.", "success": False}), 500
     except Exception as e:
+        session.cancel("Não foi possível concluir a execução do programa.")
         return jsonify({"error": str(e), "success": False}), 500
 
 if __name__ == '__main__':

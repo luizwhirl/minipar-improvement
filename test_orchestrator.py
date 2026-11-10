@@ -9,6 +9,7 @@ import json
 import tempfile
 import os
 import socket
+import shutil
 import sys
 import time
 from datetime import datetime
@@ -73,7 +74,16 @@ def _write_snapshot(path: str, session: dict) -> None:
     try:
         with open(temporary_path, "w", encoding="utf-8") as f:
             json.dump(session, f, indent=2, ensure_ascii=False)
-        os.replace(temporary_path, path)
+        # Windows readers can briefly prevent replacement of an open file.
+        # Keep publication atomic and retry only those transient sharing errors.
+        for attempt in range(10):
+            try:
+                os.replace(temporary_path, path)
+                break
+            except OSError as error:
+                if getattr(error, "winerror", None) not in (5, 32, 33) or attempt == 9:
+                    raise
+                time.sleep(0.01 * (attempt + 1))
     finally:
         if os.path.exists(temporary_path):
             os.remove(temporary_path)
@@ -180,15 +190,21 @@ def run_joiner_progress_monitor(session: dict[str, Any]) -> bool:
     spinner_idx = 0
     start_time = time.time()
     last_phase = ""
+    session_id = session.get("created_at")
+    last_progress = None
 
     _print_joiner_header(session, my_role)
-    append_session_log(f"Terminal conectado: {my_role} ({terminal_id})", source="system")
+    initial = _load_session()
+    if session_id and initial and initial.get("created_at") == session_id:
+        append_session_log(f"Terminal conectado: {my_role} ({terminal_id})", source="system")
 
     while True:
         current = _load_session()
-        if current is None:
-            print("\n\n  [INFO] Sessão encerrada.")
-            return True
+        if current is None or current.get("created_at") != session_id:
+            current = load_completed_session(session_id) if session_id else None
+            if current is None:
+                print("\n\n  [INFO] A sessão acompanhada foi encerrada.")
+                return True
 
         log = current.get("progress_log", [])
         # Imprime apenas entradas novas desde a última iteração
@@ -215,15 +231,23 @@ def run_joiner_progress_monitor(session: dict[str, Any]) -> bool:
             filled = int(percent / 5)
             bar = f" [{'█' * filled}{'░' * (20 - filled)}] {percent}%"
 
-        sys.stdout.write(f"\r  {spinner} [{elapsed:>3}s]{bar} {activity}          ")
-        sys.stdout.flush()
+        if sys.stdout.isatty():
+            # Keep the spinner on one physical line, including narrow terminals.
+            width = max(1, shutil.get_terminal_size(fallback=(80, 24)).columns - 1)
+            progress = f"  {spinner} [{elapsed:>3}s]{bar} {activity}"
+            sys.stdout.write("\r" + progress[:width].ljust(width))
+            sys.stdout.flush()
+        elif (phase, percent) != last_progress:
+            # Captured logs do not interpret carriage returns; avoid flooding them.
+            print(f"  Progresso: {percent if percent is not None else '?'}% — {activity}")
+        last_progress = (phase, percent)
 
         if status == "completed":
             print("\n")
             _print_joiner_summary(current, my_role)
             return True
         if status == "cancelled":
-            print("\n\n  [INFO] Execução cancelada pelo iniciador.")
+            print(f"\n\n  [INFO] {phase_msg if phase == 'cancelled' else 'Execução cancelada.'}")
             return False
         time.sleep(0.4)
 
