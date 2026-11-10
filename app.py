@@ -36,10 +36,6 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 def index():
     return render_template('index.html')
 
-@app.route('/legacy', methods=['GET'])
-def legacy():
-    return render_template('legacy.html')
-
 @app.route('/api/tests', methods=['GET'])
 def get_tests():
     # Retorna os testes ordenados alfabeticamente
