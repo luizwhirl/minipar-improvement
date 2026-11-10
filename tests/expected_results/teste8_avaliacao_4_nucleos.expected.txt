@@ -1,0 +1,19 @@
+Total de Atividades a Avaliar: 160 (40 alunos x 4 atividades)
+
+--- 1. Executando Modo Sequencial (Apenas 1 Nucleo / Professor) ---
+[Professor] Corrigiu 160 atividades
+
+--- 2. Executando Modo Paralelo (4 Nucleos Dedicados: Professor + 3 Monitores) ---
+Professor corrigiu 40 atividades
+Monitor 1 corrigiu 40 atividades
+Monitor 2 corrigiu 40 atividades
+Monitor 3 corrigiu 40 atividades
+
+==========================================
+         RESULTADO DA AVALIACAO           
+==========================================
+Atividades (sequencial) : 160
+Atividades (paralelo)   : 160
+Nucleos no paralelo     : 4
+Os dois modos corrigiram todas as atividades.
+==========================================
