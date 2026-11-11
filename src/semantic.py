@@ -52,8 +52,13 @@ class SemanticAnalyzer:
             if name in scope: return scope[name]
         return None
 
-    def _report(self, line: int, message: str) -> None:
-        print(f"[ERRO SEMANTICO] Linha {line}{self._get_context()}: {message}", file=sys.stderr)
+    # Codigos dos erros de fork/join (MINIP-30). Aparecem na mensagem como [SEM_FJ_01].
+    SEM_FJ_FORK_SEM_CHAMADA = "SEM_FJ_01"  # fork precisa de uma chamada: fork f(x)
+    SEM_FJ_JOIN_SEM_TAREFA = "SEM_FJ_02"   # join precisa de uma tarefa criada por fork
+
+    def _report(self, line: int, message: str, code: Optional[str] = None) -> None:
+        tag = f" [{code}]" if code else ""
+        print(f"[ERRO SEMANTICO]{tag} Linha {line}{self._get_context()}: {message}", file=sys.stderr)
         self._has_errors = True
 
     def _infer_type(self, node: Optional[ASTNode]) -> str:
@@ -269,14 +274,14 @@ class SemanticAnalyzer:
             if node.prompt: self.validate_node(node.prompt)
         elif isinstance(node, ForkExpr):
             if not isinstance(node.function_call, (FuncCallExpr, MethodCall)):
-                self._report(node.line, "A expressao 'fork' exige uma chamada de funcao ou metodo.")
+                self._report(node.line, "A expressao 'fork' exige uma chamada de funcao ou metodo.", code=self.SEM_FJ_FORK_SEM_CHAMADA)
             self.validate_node(node.function_call)
 
         elif isinstance(node, JoinExpr):
             self.validate_node(node.task)
             task_type = self._infer_type(node.task)
             if task_type not in ("task", "unknown", "var"):
-                self._report(node.line, f"A expressao 'join' exige um identificador de tarefa, recebido: '{task_type}'.")
+                self._report(node.line, f"A expressao 'join' exige um identificador de tarefa, recebido: '{task_type}'.", code=self.SEM_FJ_JOIN_SEM_TAREFA)
 
     def analyze(self, program: Program) -> bool:
         self._collect_declarations(program)
