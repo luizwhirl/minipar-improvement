@@ -657,6 +657,14 @@ var primeiro = lista[0];
 var ultimo = lista[len(lista) - 1];
 ```
 
+A indexação também vale para texto (2026.2). Em texto, `s[i]` devolve o caractere da posição `i` como um texto de 1 letra (começa em 0). Texto só pode ser **lido** por índice: `s[i] = "x"` é erro semântico (use `substr` e `+` para montar outro texto).
+
+```minipar
+var palavra = "minipar";
+var letra = palavra[0];          # "m"
+if (palavra[1] == "i") { print("ok"); }
+```
+
 ### 12.3 Atribuição por Índice
 
 ```bnf
@@ -770,6 +778,22 @@ As seguintes funções são reconhecidas pelo analisador semântico e traduzidas
 | `len(col)` | `len(list\|string)` → `number` | Comprimento de coleção |
 | `to_number(s)` | `to_number(string)` → `number` | Converte string para número |
 | `parse_ints(s)` | `parse_ints(string)` → `list` | Parseia inteiros de string separados por espaço |
+| `to_string(x)` | `to_string(number\|string)` → `string` | Converte para texto, no mesmo formato do `print` (`42`, `3.5`) |
+| `substr(s, i, n)` | `substr(string, number, number)` → `string` | Pedaço de `s` que começa em `i` e tem até `n` caracteres |
+
+### Funções de Texto (2026.2)
+
+```minipar
+var s = "ab";
+s = s + "*";                        # concatenação: "ab*"
+var t = "n=" + to_string(42);       # "n=42"
+var pedaco = substr("compilador", 0, 4);  # "comp"
+var c = s[1];                       # "b"
+```
+
+- `substr(s, i, n)`: se `i + n` passar do fim, devolve até o fim. Se `i` estiver fora do texto, o programa para com `[ERRO EXECUCAO]`.
+- `s[i]` com `i` fora do texto também para com `[ERRO EXECUCAO]`.
+- Para juntar texto com número, use `to_string`: `"n=" + to_string(5)`.
 
 ### Métodos de Lista (acesso via ponto)
 
@@ -1021,6 +1045,9 @@ O analisador semântico (`src/semantic.py`) usa inferência simples de tipos com
 | `this` | nome da classe atual |
 | `op` relacional / lógico | `bool` |
 | `"a" + "b"` (concatenação) | `string` |
+| `to_string(x)`, `substr(s, i, n)` | `string` |
+| `s[i]` com `s` do tipo `string` | `string` |
+| `len(x)`, `to_number(s)` | `number` |
 | Operação aritmética | `number` |
 | Identificador | tipo declarado na tabela de símbolos |
 | Desconhecido | `unknown` (compatível com qualquer tipo) |
@@ -1039,6 +1066,8 @@ O analisador semântico (`src/semantic.py`) usa inferência simples de tipos com
 | Método inexistente | `Método 'm' não declarado em 'C'.` |
 | Atributo inexistente | `Atributo 'a' não declarado em 'C'.` |
 | `break`/`continue` fora de laço | `'break' usado fora de laço de repetição.` |
+| Aridade errada (`to_string` 1, `substr` 3) | `Função 'substr' espera 3 argumento(s), recebeu M.` |
+| Alterar caractere de texto (`s[i] = ...`) | `Não dá para alterar um caractere de texto com s[i] = ...; use substr e +.` |
 
 ### Geração de Código C++20
 
@@ -1056,8 +1085,12 @@ O analisador semântico (`src/semantic.py`) usa inferência simples de tipos com
 | `matrix(l, c, v)` | `__make_matrix(l, c, v)` |
 | `exp(x)` | `std::exp(x)` |
 | `random()` | `random_val()` |
+| `"texto"` | `std::string("texto")` |
 | `to_number(s)` | `std::stod(s)` |
-| `len(x)` | `x.size()` |
+| `len(x)` | `static_cast<double>(x.size())` |
+| `to_string(x)` | `__minipar_to_string(x)` |
+| `substr(s, i, n)` | `__substr(s, i, n)` |
+| `x[i]` (lista, matriz ou texto) | `__index(x, i)` |
 | `range(n)` | `__minipar_range(n)` |
 | `input(p)` | `input(p)` (helper C++) |
 

@@ -29,7 +29,8 @@ class CppCodeGenerator:
     def _translate_expression(self, node: Optional[ASTNode]) -> str:
         if node is None: return "0"
         if isinstance(node, NumberExpr): return node.value
-        if isinstance(node, StringExpr): return f'"{self._escape_string(node.value)}"'
+        # Texto vira std::string (e nao const char*), assim s = s + "*" funciona no C++.
+        if isinstance(node, StringExpr): return f'std::string("{self._escape_string(node.value)}")'
         if isinstance(node, BoolExpr): return "true" if node.value else "false"
         if isinstance(node, IdentifierExpr): return node.name
         if isinstance(node, UnaryExpr): return f"({node.op}{self._translate_expression(node.operand)})"
@@ -59,13 +60,18 @@ class CppCodeGenerator:
             if node.name == "random":
                 return "random_val()"
             if node.name == "len":
-                return f"{self._translate_expression(node.arguments[0])}.size()"
+                # len devolve numero com sinal (double): len(s) - 1 nao "da a volta" quando passa de 0.
+                return f"static_cast<double>({self._translate_expression(node.arguments[0])}.size())"
             if node.name == "range":
                 return f"__minipar_range({args})"
             if node.name == "to_number":
                 return f"std::stod({args})"
             if node.name == "parse_ints":
                 return f"__parse_ints({args})"
+            if node.name == "to_string":
+                return f"__minipar_to_string({args})"
+            if node.name == "substr":
+                return f"__substr({args})"
             return f"{node.name}({args})"
 
         if isinstance(node, CChannelExpr):
@@ -90,7 +96,8 @@ class CppCodeGenerator:
         if isinstance(node, IndexExpr):
             obj = self._translate_expression(node.object)
             idx = self._translate_expression(node.index)
-            return f"{obj}[{idx}]"
+            # __index: em lista/matriz e o v[i] de sempre; em texto devolve o caractere como texto.
+            return f"__index({obj}, {idx})"
 
         # fork f(x): roda a chamada numa thread propria e devolve o numero da tarefa.
         # [=] copia os valores atuais (ex.: o i do laco), entao cada tarefa recebe o seu.

@@ -1,0 +1,55 @@
+# Teste MINIP-28: funcoes de texto (to_string, substr, s[i] e s = s + "*")
+
+# Monta uma linha com n asteriscos, juntando texto a cada volta.
+func linha(n) {
+    var s = "";
+    var i = 0;
+    while (i < n) {
+        s = s + "*";
+        i = i + 1;
+    }
+    return s;
+}
+
+# Inverte um texto lendo letra por letra com s[i].
+func inverter(p) {
+    var r = "";
+    var i = len(p) - 1;
+    while (i >= 0) {
+        r = r + p[i];
+        i = i - 1;
+    }
+    return r;
+}
+
+# Conta quantas vezes a letra aparece no texto.
+func contar(p, letra) {
+    var total = 0;
+    for (var i = 0; i < len(p); i = i + 1) {
+        if (p[i] == letra) {
+            total = total + 1;
+        }
+    }
+    return total;
+}
+
+seq {
+    var s = "ab";
+    s = s + "*";
+    print(s);
+
+    print(linha(5));
+
+    var n = 42;
+    print("n=" + to_string(n));
+    print("media=" + to_string(7.5));
+
+    var palavra = "compilador";
+    print(substr(palavra, 0, 4));
+    print(substr(palavra, 7, 100));
+    print(palavra[0], palavra[9]);
+
+    print(inverter("minipar"));
+    print("letras a: " + to_string(contar("banana", "a")));
+    print("tamanho: " + to_string(len(palavra)));
+}

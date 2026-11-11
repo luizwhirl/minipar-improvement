@@ -129,6 +129,41 @@ std::string __to_string(const T& val) {
     }
 }
 
+// ===== funcoes de texto =====
+// to_string(x): numero (ou texto) vira texto, no mesmo formato do print (42 e nao 42.000000).
+template<typename T>
+std::string __minipar_to_string(const T& val) {
+    std::ostringstream os;
+    os << val;
+    return os.str();
+}
+
+// substr(s, inicio, tamanho): pedaco do texto; se passar do fim, corta ate o fim.
+inline std::string __substr(const std::string& s, double inicio, double tamanho) {
+    if (inicio < 0 || inicio > static_cast<double>(s.size())) {
+        std::cerr << "[ERRO EXECUCAO] substr com inicio fora do texto: " << inicio << std::endl;
+        std::exit(1);
+    }
+    if (tamanho < 0) tamanho = 0;
+    return s.substr(static_cast<size_t>(inicio), static_cast<size_t>(tamanho));
+}
+
+// s[i] e lista[i]: em texto devolve o caractere i como texto de 1 letra
+// (para comparar com "a"); em lista e matriz continua sendo o v[i] de sempre
+// (pode receber valor: lista[i] = 5).
+template<typename V, typename I>
+decltype(auto) __index(V&& v, I i) {
+    if constexpr (std::is_same_v<std::decay_t<V>, std::string>) {
+        if (i < 0 || static_cast<size_t>(i) >= v.size()) {
+            std::cerr << "[ERRO EXECUCAO] indice fora do texto: " << i << std::endl;
+            std::exit(1);
+        }
+        return std::string(1, v[static_cast<size_t>(i)]);
+    } else {
+        return std::forward<V>(v)[static_cast<size_t>(i)];
+    }
+}
+
 template<typename T>
 auto __make_matrix(int rows, int cols, T init_val) {
     using ActualT = std::conditional_t<std::is_same_v<std::decay_t<T>, const char*>, std::string, T>;
