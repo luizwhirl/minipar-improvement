@@ -1,0 +1,113 @@
+# Teste 8: avaliação de 160 atividades com 4 núcleos (fork/join)
+# Baseado no script Python "Teste8-Avaliacao-Atividades-Versao-Uso-de-4Nucleos".
+# Cada avaliador (Professor + 3 Monitores) roda numa tarefa criada com fork,
+# e o join espera cada uma terminar e devolve quantas atividades ela corrigiu.
+
+# ------------------------------------------------------------------
+# PASSO 1: RECURSOS NATIVOS
+# ------------------------------------------------------------------
+
+# Simula o tempo de correção gastando CPU (no Python: simular_atraso).
+# A soma é devolvida e usada depois, para o g++ (-O3) não apagar o laço.
+func simular_atraso(iteracoes) {
+    var soma = 0.0;
+    var i = 0;
+    while (i < iteracoes) {
+        soma = soma + i;
+        i = i + 1;
+    }
+    return soma;
+}
+
+# Sorteio fixo do tempo de correção (no Python: meu_random_uniforme).
+# Cada atividade tem sempre o mesmo tempo, entre 0.05 e 0.15 "segundos",
+# assim a saída é igual em toda execução, mesmo com várias threads.
+func tempo_correcao(indice) {
+    var estado = ((indice * 1103) + 12345) % 65536;
+    return 0.05 + (0.10 * (estado / 65535.0));
+}
+
+# Nome de cada avaliador (no Python: lista AVALIADORES)
+func nome_avaliador(id) {
+    if (id == 0) { return "Professor"; }
+    if (id == 1) { return "Monitor 1"; }
+    if (id == 2) { return "Monitor 2"; }
+    return "Monitor 3";
+}
+
+# ------------------------------------------------------------------
+# PASSO 3: FUNÇÕES DE TRABALHO DOS NÚCLEOS
+# ------------------------------------------------------------------
+
+# Corrige uma atividade. Devolve 1 quando terminou.
+func avaliar_atividade(indice) {
+    var soma = simular_atraso(tempo_correcao(indice) * 15000000);
+    if (soma < indice) { return 0; }
+    return 1;
+}
+
+# Trabalho de um núcleo: corrige as atividades de "inicio" até "fim - 1"
+# e devolve quantas corrigiu (o join só devolve número).
+func trabalhador_nucleo(inicio, fim) {
+    var corrigidas = 0;
+    var indice = inicio;
+    while (indice < fim) {
+        corrigidas = corrigidas + avaliar_atividade(indice);
+        indice = indice + 1;
+    }
+    return corrigidas;
+}
+
+# ------------------------------------------------------------------
+# PASSO 4: EXECUÇÃO SEQUENCIAL E PARALELA (FORK & JOIN)
+# ------------------------------------------------------------------
+seq {
+    # PASSO 2: cenário (40 alunos x 4 atividades = 160 atividades)
+    var num_alunos = 40;
+    var atividades_por_aluno = 4;
+    var total_atividades = num_alunos * atividades_por_aluno;
+    var num_avaliadores = 4;
+
+    print("Total de Atividades a Avaliar:", total_atividades, "(40 alunos x 4 atividades)");
+    print("");
+
+    # --- 1. Modo sequencial: 1 núcleo (Professor) corrige tudo ---
+    print("--- 1. Executando Modo Sequencial (Apenas 1 Nucleo / Professor) ---");
+    var corrigidas_seq = trabalhador_nucleo(0, total_atividades);
+    print("[Professor] Corrigiu", corrigidas_seq, "atividades");
+    print("");
+
+    # --- 2. Modo paralelo: 1 núcleo para cada avaliador ---
+    print("--- 2. Executando Modo Paralelo (4 Nucleos Dedicados: Professor + 3 Monitores) ---");
+    var tamanho_fatia = total_atividades / num_avaliadores;
+
+    # ETAPA 1: FOR DE ALOCAÇÃO (fork dispara 1 tarefa por avaliador)
+    var nucleos = [];
+    for (var n in range(num_avaliadores)) {
+        nucleos.append(fork trabalhador_nucleo(n * tamanho_fatia, (n + 1) * tamanho_fatia));
+    }
+
+    # ETAPA 2: FOR DE SINCRONIZAÇÃO (join espera cada núcleo e junta o resultado)
+    var corrigidas_par = 0;
+    var id = 0;
+    for (var tarefa in nucleos) {
+        var feitas = join(tarefa);
+        print(nome_avaliador(id), "corrigiu", feitas, "atividades");
+        corrigidas_par = corrigidas_par + feitas;
+        id = id + 1;
+    }
+    print("");
+
+    print("==========================================");
+    print("         RESULTADO DA AVALIACAO           ");
+    print("==========================================");
+    print("Atividades (sequencial) :", corrigidas_seq);
+    print("Atividades (paralelo)   :", corrigidas_par);
+    print("Nucleos no paralelo     :", num_avaliadores);
+    if (corrigidas_seq == corrigidas_par) {
+        print("Os dois modos corrigiram todas as atividades.");
+    } else {
+        print("ERRO: os modos deram resultados diferentes.");
+    }
+    print("==========================================");
+}

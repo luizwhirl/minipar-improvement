@@ -1,0 +1,40 @@
+@ Gerado pelo Teste 11 do MiniPar (minicompilador de expressoes)
+@ Expressao: 2 + 3 * (4 - 1)
+@ Posfixa:   2 3 4 1 - * +
+@ Ao parar: r0 e a palavra "resultado" guardam o valor final.
+.global _start
+.text
+_start:
+    LDR sp, =topo_pilha      @ pilha propria (nao depende do sistema)
+    LDR r0, =2
+    PUSH {r0}
+    LDR r0, =3
+    PUSH {r0}
+    LDR r0, =4
+    PUSH {r0}
+    LDR r0, =1
+    PUSH {r0}
+    POP {r1}                 @ -
+    POP {r0}
+    SUB r0, r0, r1
+    PUSH {r0}
+    POP {r1}                 @ *
+    POP {r0}
+    MUL r0, r0, r1
+    PUSH {r0}
+    POP {r1}                 @ +
+    POP {r0}
+    ADD r0, r0, r1
+    PUSH {r0}
+    POP {r0}
+    LDR r1, =resultado
+    STR r0, [r1]
+fim:
+    B fim
+
+.data
+resultado:
+    .word 0
+pilha:
+    .space 1024
+topo_pilha:

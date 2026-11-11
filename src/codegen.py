@@ -1,5 +1,4 @@
 from __future__ import annotations
-from dataclasses import fields, is_dataclass
 import os
 import subprocess
 import sys
@@ -13,18 +12,6 @@ from ast_nodes import (
     ForkExpr, JoinExpr
 )
 from cpp_template import _CPP_HEADER
-
-
-def unsupported_cpp_nodes(value):
-    """Find unsupported parallel expressions, including standalone statements."""
-    if isinstance(value, (ForkExpr, JoinExpr)):
-        yield value
-    if is_dataclass(value):
-        for field in fields(value):
-            yield from unsupported_cpp_nodes(getattr(value, field.name))
-    elif isinstance(value, list):
-        for item in value:
-            yield from unsupported_cpp_nodes(item)
 
 
 class CppCodeGenerator:
@@ -42,7 +29,8 @@ class CppCodeGenerator:
     def _translate_expression(self, node: Optional[ASTNode]) -> str:
         if node is None: return "0"
         if isinstance(node, NumberExpr): return node.value
-        if isinstance(node, StringExpr): return f'"{self._escape_string(node.value)}"'
+        # Texto vira std::string (e nao const char*), assim s = s + "*" funciona no C++.
+        if isinstance(node, StringExpr): return f'std::string("{self._escape_string(node.value)}")'
         if isinstance(node, BoolExpr): return "true" if node.value else "false"
         if isinstance(node, IdentifierExpr): return node.name
         if isinstance(node, UnaryExpr): return f"({node.op}{self._translate_expression(node.operand)})"
@@ -72,13 +60,18 @@ class CppCodeGenerator:
             if node.name == "random":
                 return "random_val()"
             if node.name == "len":
-                return f"{self._translate_expression(node.arguments[0])}.size()"
+                # len devolve numero com sinal (double): len(s) - 1 nao "da a volta" quando passa de 0.
+                return f"static_cast<double>({self._translate_expression(node.arguments[0])}.size())"
             if node.name == "range":
                 return f"__minipar_range({args})"
             if node.name == "to_number":
                 return f"std::stod({args})"
             if node.name == "parse_ints":
                 return f"__parse_ints({args})"
+            if node.name == "to_string":
+                return f"__minipar_to_string({args})"
+            if node.name == "substr":
+                return f"__substr({args})"
             return f"{node.name}({args})"
 
         if isinstance(node, CChannelExpr):
@@ -103,7 +96,18 @@ class CppCodeGenerator:
         if isinstance(node, IndexExpr):
             obj = self._translate_expression(node.object)
             idx = self._translate_expression(node.index)
-            return f"{obj}[{idx}]"
+            # __index: em lista/matriz e o v[i] de sempre; em texto devolve o caractere como texto.
+            return f"__index({obj}, {idx})"
+
+        # fork f(x): roda a chamada numa thread propria e devolve o numero da tarefa.
+        # [=] copia os valores atuais (ex.: o i do laco), entao cada tarefa recebe o seu.
+        # mutable deixa a tarefa mexer na propria copia (ex.: xs.pop() dentro do fork).
+        if isinstance(node, ForkExpr):
+            call = self._translate_expression(node.function_call)
+            return f"__fork([=]() mutable {{ return {call}; }})"
+        # join(t): espera a tarefa t terminar e devolve o resultado (double).
+        if isinstance(node, JoinExpr):
+            return f"__join({self._translate_expression(node.task)})"
 
         return "0"
 
@@ -118,31 +122,60 @@ class CppCodeGenerator:
             return self._has_value_return(node.body)
         return False
 
-    def _uses_float_return(self, node: Optional[ASTNode]) -> bool:
+    def _float_vars(self, node: Optional[ASTNode], names: set) -> None:
+        """Junta as variaveis locais que guardam um double (ex.: var a = join(t))."""
+        if node is None:
+            return
+        if isinstance(node, VarDecl) and self._uses_float_return(node.init_value, names):
+            names.add(node.name)
+        elif isinstance(node, Assignment) and self._uses_float_return(node.value, names):
+            names.add(node.name)
+        elif isinstance(node, (SeqBlock, ParBlock)):
+            for stmt in node.statements:
+                self._float_vars(stmt, names)
+        elif isinstance(node, IfStmt):
+            self._float_vars(node.then_branch, names)
+            self._float_vars(node.else_branch, names)
+        elif isinstance(node, (WhileStmt, DoWhileStmt, ForStmt)):
+            self._float_vars(node.body, names)
+
+    def _uses_float_return(self, node: Optional[ASTNode], float_vars: frozenset = frozenset()) -> bool:
         """Detecta aritmética de ponto flutuante no corpo da função."""
         if node is None:
             return False
+        if isinstance(node, JoinExpr):
+            return True  # join sempre devolve double
+        if isinstance(node, IdentifierExpr):
+            return node.name in float_vars
         if isinstance(node, BinaryExpr):
             if node.op == "/":
                 return True
-            return self._uses_float_return(node.left) or self._uses_float_return(node.right)
+            return self._uses_float_return(node.left, float_vars) or self._uses_float_return(node.right, float_vars)
         if isinstance(node, NumberExpr):
             return "." in node.value
         if isinstance(node, (SeqBlock, ParBlock)):
-            return any(self._uses_float_return(stmt) for stmt in node.statements)
+            return any(self._uses_float_return(stmt, float_vars) for stmt in node.statements)
         if isinstance(node, IfStmt):
-            return self._uses_float_return(node.then_branch) or self._uses_float_return(node.else_branch)
+            return self._uses_float_return(node.then_branch, float_vars) or self._uses_float_return(node.else_branch, float_vars)
         if isinstance(node, (WhileStmt, DoWhileStmt, ForStmt)):
-            return self._uses_float_return(node.body)
+            return self._uses_float_return(node.body, float_vars)
         if isinstance(node, ReturnStmt):
-            return self._uses_float_return(node.value)
+            return self._uses_float_return(node.value, float_vars)
         return False
 
     def _return_type(self, body: Optional[ASTNode]) -> str:
         if not self._has_value_return(body):
             return "void"
+        # Variaveis que recebem join (ou contas com elas) tambem sao double.
+        # Repete ate estabilizar para pegar cadeias como var a = join(t); var c = a + 1;
+        float_vars: set = set()
+        while True:
+            before = len(float_vars)
+            self._float_vars(body, float_vars)
+            if len(float_vars) == before:
+                break
         # auto falha no g++ quando há return double e return 0 (int) na mesma função
-        if self._uses_float_return(body):
+        if self._uses_float_return(body, frozenset(float_vars)):
             return "double"
         return "auto"
 
@@ -160,7 +193,7 @@ class CppCodeGenerator:
             tgt = self._translate_expression(node.target)
             return f"{indent}{tgt} = {self._translate_expression(node.value)};\n"
         
-        if isinstance(node, (MethodCall, FuncCallExpr)):
+        if isinstance(node, (MethodCall, FuncCallExpr, ForkExpr, JoinExpr)):
             return f"{indent}{self._translate_expression(node)};\n"
         if isinstance(node, ReturnStmt):
             val = self._translate_expression(node.value) if node.value else ""
@@ -241,11 +274,6 @@ class CppCodeGenerator:
 
     def generate_text(self, program: Program) -> str:
         """Translate an AST to C++ without writing files or invoking a compiler."""
-        unsupported = next(unsupported_cpp_nodes(program), None)
-        if unsupported is not None:
-            operator = "fork" if isinstance(unsupported, ForkExpr) else "join"
-            raise NotImplementedError(
-                f"Linha {unsupported.line}: A geração C++ para '{operator}' ainda não está implementada.")
         cpp_code = _CPP_HEADER
         
         for node in program.statements:
@@ -298,7 +326,10 @@ class CppCodeGenerator:
         with open(cpp_path, "w", encoding="utf-8") as f: f.write(cpp_code)
         
         print("[CODEGEN] Compilando via g++ com -std=c++20 e -O3...")
-        result = subprocess.run(["g++", "-std=c++20", "-O3", cpp_path, "-o", exe_path, "-pthread", "-lws2_32"])
+        command = ["g++", "-std=c++20", "-O3", cpp_path, "-o", exe_path, "-pthread"]
+        if sys.platform == "win32":
+            command.append("-lws2_32")  # biblioteca de sockets do Windows (Winsock)
+        result = subprocess.run(command)
         if result.returncode == 0:
             print(f"[SUCESSO] Executavel: {exe_path}")
             return True

@@ -15,9 +15,25 @@ document.addEventListener("DOMContentLoaded", () => {
     const terminalOutput = byId("terminal-output");
     const file = byId("current-file");
     const run = byId("btn-run");
+    const download = byId("btn-download");
+    const executableLink = byId("executable-link");
+    const programInputs = byId("program-inputs");
+    const compilerLog = byId("compiler-log");
+    const compilerOutput = byId("compiler-output");
     const clear = byId("btn-clear");
     const tabs = Array.from(document.querySelectorAll('[role="tab"]'));
     const executionTab = byId("tab-exec");
+    const armTab = byId("tab-arm");
+    const armFeedback = byId("arm-feedback");
+    const armCode = byId("arm-code");
+    const armDownload = byId("arm-download");
+    const openTest11 = byId("btn-open-t11");
+    const armMessages = {
+        waiting: "Execute um programa que imprima o Assembly entre as marcas para ver o código aqui.",
+        missing: "A última execução não imprimiu Assembly ARM entre as linhas === INICIO ARM === e === FIM ARM ===.",
+        unclosed: "A saída tem a linha === INICIO ARM ===, mas falta a linha === FIM ARM ===. Confira se o programa terminou.",
+        repeated: "A saída tem mais de um bloco de Assembly ARM. Deixe só um bloco para poder baixar o arquivo."
+    };
     const results = document.querySelector(".results");
     const phases = ["tokens", "ast", "semantic", "tac", "cpp"];
     const phaseNames = {
@@ -51,6 +67,9 @@ document.addEventListener("DOMContentLoaded", () => {
     let loadingExample = false;
     let astViewer = null;
     let astSource = null;
+    let inputMode = "reads";
+    let test11File = null;
+    let armUrl = null;
 
     const controlsBusy = () => executionBusy || monitoring || loadingExample;
 
@@ -85,10 +104,18 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     function syncControls() {
         const value = controlsBusy();
-        run.disabled = clear.disabled = examples.disabled = value;
+        run.disabled = download.disabled = clear.disabled = examples.disabled = value;
+        openTest11.disabled = value || !test11File;
+        programInputs.disabled = value || inputMode === "none";
         source.readOnly = value;
         editor?.setOption?.("readOnly", value);
         results.setAttribute("aria-busy", String(value));
+    }
+
+    function setInputMode(mode, message) {
+        inputMode = mode;
+        byId("inputs-help").textContent = message;
+        programInputs.disabled = controlsBusy() || mode === "none";
     }
 
     function destroyASTViewer() {
@@ -137,6 +164,69 @@ document.addEventListener("DOMContentLoaded", () => {
         executionStatus = "Pronto";
         terminalOutput.textContent = message;
         terminalOutput.classList.remove("error-text");
+        compilerLog.hidden = true;
+        compilerLog.open = false;
+        compilerOutput.textContent = "";
+        resetArm();
+    }
+
+    function resetArm(message = armMessages.waiting) {
+        if (armUrl) URL.revokeObjectURL(armUrl);
+        armUrl = null;
+        armDownload.hidden = true;
+        armDownload.removeAttribute("href");
+        armDownload.removeAttribute("download");
+        armCode.textContent = "";
+        armCode.hidden = true;
+        armFeedback.className = "phase-feedback";
+        armFeedback.textContent = message;
+        armTab.classList.remove("has-arm");
+    }
+
+    // Procura o Assembly na saída do programa e libera o download do .arm.
+    function showArm(output, filename) {
+        const found = window.MiniParArmExtract.extract(output);
+        if (found.status !== "found") {
+            resetArm(armMessages[found.status]);
+            if (found.status !== "missing") armFeedback.classList.add("is-error");
+            return;
+        }
+        resetArm();
+        const name = window.MiniParArmExtract.armFilename(filename);
+        armUrl = URL.createObjectURL(new Blob([found.code], { type: "text/plain;charset=utf-8" }));
+        armDownload.href = armUrl;
+        armDownload.download = name;
+        armDownload.textContent = `Baixar ${name}`;
+        armDownload.hidden = false;
+        armCode.textContent = found.code;
+        armCode.hidden = false;
+        armFeedback.classList.add("is-success");
+        const lines = found.code.split("\n").length - 1;
+        armFeedback.textContent = `Assembly ARMv7 encontrado na última execução (${lines} ${lines === 1 ? "linha" : "linhas"}).`;
+        armTab.classList.add("has-arm");
+    }
+
+    function clearExecutable() {
+        executableLink.hidden = true;
+        executableLink.removeAttribute("href");
+        executableLink.removeAttribute("download");
+    }
+
+    function showExecutable(data, startDownload = false) {
+        if (!data.success || typeof data.download_url !== "string") return;
+        const url = new URL(data.download_url, window.location.href);
+        if (url.origin !== window.location.origin || !url.pathname.startsWith("/api/")) return;
+        executableLink.href = url.href;
+        executableLink.download = data.filename || "programa";
+        executableLink.hidden = false;
+        if (startDownload) executableLink.click();
+    }
+
+    function appendOutput(text) {
+        const panel = byId("out-exec");
+        const follow = panel.scrollHeight - panel.scrollTop - panel.clientHeight < 64;
+        terminalOutput.append(document.createTextNode(text));
+        if (follow) panel.scrollTop = panel.scrollHeight;
     }
 
     async function post(url, body, signal) {
@@ -157,6 +247,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function invalidateResults() {
         sourceRevision++;
+        spec = null;
+        clearExecutable();
+        setInputMode("unknown", "Se o código usa input(), preencha uma linha por leitura antes de executar.");
         resetResults("Código alterado. Execute novamente para atualizar os resultados.", false);
         if (!controlsBusy()) status("Código alterado", true);
     }
@@ -275,6 +368,10 @@ document.addEventListener("DOMContentLoaded", () => {
             if (!controlsBusy()) status(executionStatus);
             return;
         }
+        if (tab === armTab) {
+            if (!controlsBusy()) status(executionStatus);
+            return;
+        }
         const phase = tab.id.replace("tab-", "");
         if (phaseCache.has(phase)) {
             const cached = phaseCache.get(phase);
@@ -333,12 +430,18 @@ document.addEventListener("DOMContentLoaded", () => {
     });
     fetch("/api/tests").then(res => res.json()).then(data => {
         for (const filename of data.tests) examples.add(new Option(filename, filename));
+        test11File = data.tests.find(name => /^teste_?11/i.test(name)) || null;
+        if (test11File) byId("arm-open-help").textContent = `Carrega ${test11File} no editor. Depois, execute.`;
+        syncControls();
     }).catch(showError);
 
     examples.onchange = async () => {
         const filename = examples.value;
         if (!filename || controlsBusy()) return;
         loadingExample = true;
+        clearExecutable();
+        programInputs.value = "";
+        byId("execution-inputs").open = false;
         sourceRevision++;
         resetResults("Carregando programa…");
         syncControls();
@@ -350,6 +453,14 @@ document.addEventListener("DOMContentLoaded", () => {
             if (monitoring) return;
             setCode(program.code);
             spec = metadata;
+            if (metadata.requires_input) {
+                byId("execution-inputs").open = true;
+                const descriptions = (metadata.inputs || []).map((item, index) =>
+                    `${index + 1}. ${item.descricao || item.prompt || "Entrada"}`);
+                setInputMode("reads", "Preencha antes de executar, na ordem: " + descriptions.join("; "));
+            } else {
+                setInputMode("none", "Este programa não usa input(). Os valores dele estão definidos no código.");
+            }
             file.textContent = filename;
             resetResults("Programa carregado. Pronto para executar.");
             status("Pronto", true);
@@ -360,29 +471,11 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     };
 
-    async function collectInputs(spec) {
-        if (!spec || !spec.requires_input || !spec.inputs.length) return [];
-
-        let msg =
-            `${spec.titulo}\n\n` +
-            `Este programa possui ${spec.input_count || spec.inputs.length} entrada(s) input().\n` +
-            `Informe os valores que serão enviados ao programa:\n\n`;
-        spec.inputs.forEach((inp, i) => {
-            const desc = inp.descricao || inp.prompt || `Entrada ${i + 1}`;
-            msg += `[${i + 1}] ${desc}\n`;
-        });
-        alert(msg);
-
-        const collected = [];
-        for (let i = 0; i < spec.inputs.length; i++) {
-            const inp = spec.inputs[i];
-            const desc = inp.descricao || inp.prompt || `Entrada ${i + 1}`;
-            const valor = prompt(`${desc}\n\nDigite o valor:`);
-            if (valor === null) return null;
-            collected.push(valor.trim());
-        }
-        return collected;
-    }
+    openTest11.onclick = () => {
+        if (!test11File || controlsBusy()) return;
+        examples.value = test11File;
+        examples.onchange();
+    };
 
     async function handleMultiComputer(spec, filename) {
         if (!spec || !spec.multi_computer || !spec.multi_computer.required) return true;
@@ -439,12 +532,27 @@ document.addEventListener("DOMContentLoaded", () => {
         const filename = file.textContent;
         const code = getCode();
         const revision = sourceRevision;
+        let streamPhase = "compiling";
+        let programOutput = "";
+        clearExecutable();
         resetResults("Preparando execução…", true, false);
         status("Preparando", true);
         try {
-            const inputs = await collectInputs(spec);
+            const inputText = programInputs.value.replaceAll("\r\n", "\n");
+            const inputs = inputText === "" ? [] : inputText.split("\n");
+            if (inputs.length) {
+                const checked = await post("/api/analyze", { code, phase: "tokens" });
+                if (revision !== sourceRevision || code !== getCode() || monitoring) return;
+                if (checked.success && !checked.result.tokens.some(token => token.type === "INPUT")) {
+                    const message = "O código atual não usa input(). Os valores digitados não seriam utilizados. Limpe o campo, escolha um exemplo com entrada ou adicione input() ao código.";
+                    setInputMode("unused", message);
+                    byId("execution-inputs").open = true;
+                    showError(new Error(message));
+                    return;
+                }
+            }
             if (monitoring) return;
-            if (inputs === null || !await handleMultiComputer(spec, filename)) {
+            if (!await handleMultiComputer(spec, filename)) {
                 if (!monitoring) {
                     status("Cancelado", true);
                     terminalOutput.textContent = "Execução cancelada.";
@@ -453,16 +561,81 @@ document.addEventListener("DOMContentLoaded", () => {
             }
             if (monitoring) return;
             status("Compilando", true);
-            terminalOutput.textContent = "Compilando e executando o programa…";
-            const data = await post("/api/compile", { code, filename, inputs });
+            terminalOutput.textContent = "";
+            const response = await fetch("/api/execute", { method: "POST",
+                headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code, filename, inputs }) });
+            const data = await window.MiniParExecutionStream.consume(response, event => {
+                if (revision !== sourceRevision || code !== getCode() || monitoring) return;
+                if (event.type === "phase") {
+                    streamPhase = event.phase;
+                    status(event.phase === "executing" ? "Executando" : "Compilando", true);
+                    if (event.message) appendOutput(`\n${event.message}\n`);
+                } else if (event.type === "output") {
+                    if (streamPhase === "compiling") {
+                        compilerLog.hidden = false;
+                        compilerOutput.append(document.createTextNode(event.text));
+                    } else {
+                        if (event.stream !== "stderr") programOutput += event.text;
+                        appendOutput(event.text);
+                    }
+                } else if (event.type === "error") {
+                    if (streamPhase === "compiling") compilerLog.open = true;
+                    terminalOutput.classList.add("error-text");
+                    appendOutput(`\n${event.message || "Erro na execução."}\n`);
+                }
+            });
             if (revision !== sourceRevision || code !== getCode()) return;
             cacheGeneratedPhase("cpp", data.cpp);
             cacheGeneratedPhase("tac", data.tac);
-            if (!data.success) throw new Error(data.stderr || data.error || "Erro na execução.");
             if (!monitoring) {
-                terminalOutput.textContent = data.stdout || "Execução concluída.";
-                status("Concluído", true);
+                showArm(programOutput, filename);
+                showExecutable(data);
+                terminalOutput.classList.toggle("error-text", !data.success);
+                appendOutput(data.success ? "\nExecução concluída.\n"
+                    : `\nExecução encerrada com erro${Number.isInteger(data.exit_code) ? ` (código ${data.exit_code})` : ""}.\n`);
+                status(data.success ? "Concluído" : "Erro", true);
             }
+        } catch (error) {
+            if (!monitoring) {
+                status("Erro", true);
+                terminalOutput.classList.add("error-text");
+                appendOutput(`\n${error.message}\n`);
+            }
+        }
+        finally {
+            executionBusy = false;
+            syncControls();
+        }
+    };
+
+    download.onclick = async () => {
+        if (controlsBusy()) return;
+        cancelAnalysis();
+        executionBusy = true;
+        syncControls();
+        clearExecutable();
+        const code = getCode();
+        const revision = sourceRevision;
+        resetResults("Compilando o programa para download…", true, false);
+        status("Compilando", true);
+        try {
+            const data = await post("/api/build", { code, filename: file.textContent });
+            if (revision !== sourceRevision || code !== getCode() || monitoring) return;
+            cacheGeneratedPhase("cpp", data.cpp);
+            cacheGeneratedPhase("tac", data.tac);
+            compilerOutput.textContent = [data.stdout, data.stderr].filter(Boolean).join("\n");
+            compilerLog.hidden = !compilerOutput.textContent;
+            terminalOutput.textContent = "";
+            if (!data.success || !data.download_url) {
+                compilerLog.open = true;
+                terminalOutput.classList.add("error-text");
+                appendOutput("\nNão foi possível gerar o executável.\n");
+                status("Erro", true);
+                return;
+            }
+            showExecutable(data, true);
+            appendOutput("\nExecutável gerado. O download foi solicitado; o link acima permite baixar novamente.\n");
+            status("Compilado", true);
         } catch (error) { showError(error); }
         finally {
             executionBusy = false;
@@ -475,6 +648,10 @@ document.addEventListener("DOMContentLoaded", () => {
         sourceRevision++;
         setCode("");
         spec = null;
+        clearExecutable();
+        programInputs.value = "";
+        byId("execution-inputs").open = false;
+        setInputMode("none", "Adicione input() ao código para receber valores do teclado.");
         examples.value = "";
         file.textContent = "ide_temp.minipar";
         resetResults("Execute o programa para ver a saída.");

@@ -19,6 +19,11 @@ class Symbol:
     methods: Dict[str, List[str]] = field(default_factory=dict)
 
 class SemanticAnalyzer:
+    # Funcoes que ja vem com a linguagem (nao precisam de func).
+    BUILTINS = ("exp", "random", "range", "len", "to_number", "parse_ints", "to_string", "substr")
+    # Quantos argumentos as funcoes de texto pedem.
+    BUILTIN_ARITY = {"to_string": 1, "substr": 3}
+
     def __init__(self) -> None:
         self._scopes: List[Dict[str, Symbol]] = []
         self._has_errors = False
@@ -84,8 +89,12 @@ class SemanticAnalyzer:
         if isinstance(node, FuncCallExpr):
             if node.name in ("random", "exp"): return "number"
             if node.name in ("range", "parse_ints"): return "list"
+            if node.name in ("to_string", "substr"): return "string"
+            if node.name in ("len", "to_number"): return "number"
             return "unknown"
-        if isinstance(node, IndexExpr): return "unknown"
+        if isinstance(node, IndexExpr):
+            # s[i] em texto devolve um caractere (texto de 1 letra)
+            return "string" if self._infer_type(node.object) == "string" else "unknown"
         
         if isinstance(node, ForkExpr): 
             return "task"
@@ -149,6 +158,9 @@ class SemanticAnalyzer:
         elif isinstance(node, IndexAssign):
             self.validate_node(node.target)
             self.validate_node(node.value)
+            # Texto so pode ser lido por indice (s[i]); para mudar, monte outro texto.
+            if isinstance(node.target, IndexExpr) and self._infer_type(node.target.object) == "string":
+                self._report(node.line, "Nao da para alterar um caractere de texto com s[i] = ...; use substr e +.")
         elif isinstance(node, IdentifierExpr):
             if self._lookup(node.name) is None:
                 self._report(node.line, f"Variavel '{node.name}' nao declarada.")
@@ -227,8 +239,10 @@ class SemanticAnalyzer:
             self.validate_node(node.object)
             for arg in node.arguments: self.validate_node(arg)
         elif isinstance(node, FuncCallExpr):
-            if node.name not in self._functions and node.name not in ("exp", "random", "range", "len", "to_number", "parse_ints"):
+            if node.name not in self._functions and node.name not in self.BUILTINS:
                 self._report(node.line, f"Funcao '{node.name}' nao declarada.")
+            elif node.name not in self._functions and node.name in self.BUILTIN_ARITY and len(node.arguments) != self.BUILTIN_ARITY[node.name]:
+                self._report(node.line, f"Funcao '{node.name}' espera {self.BUILTIN_ARITY[node.name]} argumento(s), recebeu {len(node.arguments)}.")
             elif node.name in self._functions and len(self._functions[node.name].params) != len(node.arguments):
                 self._report(node.line, f"Funcao '{node.name}' espera {len(self._functions[node.name].params)} argumento(s), recebeu {len(node.arguments)}.")
             for arg in node.arguments: self.validate_node(arg)
