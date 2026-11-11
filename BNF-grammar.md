@@ -11,7 +11,7 @@
 > Esta gramática foi derivada diretamente da implementação real do compilador
 > (arquivos `src/lexer.py`, `src/parser.py` e `src/ast_nodes.py`), cruzada com
 > o relatório técnico do projeto e as especificações formais fornecidas pelo professor.
-> Ela descreve **toda** a sintaxe aceita pelo compilador MiniPar 2026.1.
+> Ela descreve **toda** a sintaxe aceita pelo compilador MiniPar 2026.2.
 
 ---
 
@@ -71,7 +71,7 @@ number  int  string  bool  void  list  dict
 ### 2.2 Literais
 
 ```bnf
-<NUMBER>         ::= <digito> { <digito> } [ "." <digito> { <digito> } ]
+<NUMBER>         ::= <digito> { <digito> } [ "." { <digito> } ]
 <STRING_LITERAL> ::= '"' { <caractere> } '"'
 <BOOL_LITERAL>   ::= "true" | "false"
 <IDENTIFIER>     ::= ( <letra> | "_" ) { <letra> | <digito> | "_" }
@@ -102,14 +102,10 @@ number  int  string  bool  void  list  dict
 
 ## 3. Programa
 
-O programa MiniPar é uma sequência de zero ou mais declarações e comandos no nível global.
+O programa MiniPar é uma sequência de zero ou mais comandos. Declarações de classe (`class`) e função (`func`) são comandos como os demais: o parser as aceita em qualquer posição onde um comando é aceito, inclusive dentro de blocos. Porém, o gerador de C++ só emite as declaradas no nível global; as aninhadas passam pela análise sintática e semântica, mas são ignoradas na geração de código.
 
 ```bnf
-<programa> ::= { <declaracao_global> | <comando> }
-
-<declaracao_global> ::= <declaracao_classe>
-                      | <declaracao_funcao>
-                      | <declaracao_variavel>
+<programa> ::= { <comando> }
 ```
 
 ---
@@ -161,9 +157,14 @@ func calcular(number x, number y) {
                             { <membro_classe> }
                         "}"
 
-<membro_classe> ::= "var" <declaracao_variavel>
-                  | "func" <declaracao_funcao>
+<membro_classe>   ::= <atributo_classe> | <metodo_classe>
+
+<atributo_classe> ::= "var" <IDENTIFIER> [ "=" <expressao> ] ";"
+
+<metodo_classe>   ::= "func" <IDENTIFIER> "(" [ <lista_parametros> ] ")" <bloco_seq>
 ```
+
+Atributos de classe só podem ser declarados com `var` (`number x;` dentro de uma classe é erro de sintaxe). Os tipos dos parâmetros de método são aceitos, mas ignorados.
 
 **Exemplos:**
 
@@ -188,6 +189,8 @@ class Cachorro extends Animal {
 
 ```bnf
 <comando> ::= <declaracao_variavel>
+            | <declaracao_classe>
+            | <declaracao_funcao>
             | <atribuicao>
             | <bloco_seq>
             | <bloco_par>
@@ -197,6 +200,7 @@ class Cachorro extends Animal {
             | <comando_for>
             | <comando_print>
             | <comando_send>
+            | <comando_fork>
             | <comando_join>
             | <comando_return>
             | <comando_break>
@@ -241,18 +245,19 @@ print("Valor:", x, "e", y);
 ### 5.3 Comando Return
 
 ```bnf
-<comando_return> ::= "return" [ <expressao> ] ";"
+<comando_return> ::= "return" ( <expressao> [ ";" ] | ";" )
 ```
 
 ### 5.4 Comandos Break e Continue
 
 ```bnf
-<comando_break>    ::= "break" ";"
-<comando_continue> ::= "continue" ";"
+<comando_break>    ::= "break" [ ";" ]
+<comando_continue> ::= "continue" [ ";" ]
 ```
 
 > `break` e `continue` são válidos somente dentro de laços (`while`, `do-while`, `for`).  
-> O analisador semântico reporta erro se forem usados fora de laço.
+> O analisador semântico reporta erro se forem usados fora de laço.  
+> O `;` final de `break`, `continue` e `return expressao` é opcional para o parser; `return` sem valor precisa do `;`.
 
 ---
 
@@ -293,10 +298,15 @@ par {
 Para dividir tarefas de forma recursiva ou dinâmica, a linguagem disponibiliza `fork` e `join`. O `fork` dispara uma chamada de função (ou método) em uma nova thread e retorna um manipulador (handle). O `join` recebe esse manipulador para aguardar o término e coletar o resultado.
 
 ```bnf
-<expressao_fork> ::= "fork" ( <chamada_funcao> | <chamada_metodo> )
+<expressao_fork> ::= "fork" <expressao>
+<comando_fork>   ::= <expressao_fork> ";"
 <comando_join>   ::= "join" "(" <expressao> ")" ";"
 <expressao_join> ::= "join" "(" <expressao> ")"
 ```
+
+Sintaticamente, o operando de `fork` é uma expressão qualquer; é o analisador semântico que exige que ela seja uma chamada de função ou de método. Por isso `fork f(x) + 1` é rejeitado na análise semântica, não na sintática. `fork` também pode aparecer como comando isolado (`fork f(x);`), descartando o resultado.
+
+Em C++, cada `fork` vira uma tarefa `std::async` guardada em uma lista global; o handle é o número da tarefa (um `double`), que pode ser guardado em variáveis e listas. `join` em uma tarefa inexistente encerra o programa com `[ERRO EXECUCAO]`.
 
 **Exemplos:**
 
@@ -380,7 +390,10 @@ do {
 O `for` suporta tanto o estilo clássico (inicializador; condição; incremento) quanto o estilo iterador (`for var x in colecao`):
 
 ```bnf
-<comando_for> ::= "for" "(" <for_classico> | <for_iterador> ")" <comando>
+<comando_for> ::= "for" "(" <for_cabecalho> ")" <comando>
+
+<for_cabecalho> ::= <for_classico>
+                 | <for_iterador>
 
 <for_classico> ::= [ <inicializador_for> ] ";" [ <expressao> ] ";" [ <incremento_for> ]
 
@@ -745,6 +758,7 @@ Representa inteiros e ponto flutuante. Internamente ambos são tratados como `do
                      | "\\" "t"    # tab
                      | "\\" '"'    # aspas duplas
                      | "\\" "\\"   # barra invertida
+                     | "\\" <outro_caractere>   # escape desconhecido: vale só o caractere (ex.: "\q" vira "q")
 ```
 
 ### 14.3 Booleano
@@ -801,7 +815,7 @@ var c = s[1];                       # "b"
 |--------|-----------|
 | `.append(v)` / `.push_back(v)` | Adiciona elemento ao final |
 | `.pop()` | Remove e retorna o último elemento |
-| `.size()` | Retorna o tamanho da lista |
+| `.size()` / `.size` | Retorna o tamanho da lista (os parênteses são opcionais) |
 
 ---
 
@@ -828,19 +842,15 @@ A seguir a gramática completa em formato BNF, em ordem de definição:
 
 ```bnf
 (* ============================================================ *)
-(*       GRAMÁTICA BNF — LINGUAGEM MINIPAR 2026.1               *)
+(*       GRAMÁTICA BNF — LINGUAGEM MINIPAR 2026.2               *)
 (*       Compilador: minipar-improvement                        *)
-(*       Repositório: github.com/luizwhirl/minipar-improvement  *)
+(*       Repositório: github.com/maineros/minipar-improvement-2026.2 *)
 (* ============================================================ *)
 
 
 (* ─── ESTRUTURA GLOBAL ─── *)
 
-<programa> ::= { <declaracao_global> | <comando> }
-
-<declaracao_global> ::= <declaracao_classe>
-                      | <declaracao_funcao>
-                      | <declaracao_variavel>
+<programa> ::= { <comando> }
 
 
 (* ─── DECLARAÇÕES ─── *)
@@ -856,13 +866,16 @@ A seguir a gramática completa em formato BNF, em ordem de definição:
 <declaracao_classe>   ::= "class" <IDENTIFIER> [ "extends" <IDENTIFIER> ]
                           "{" { <membro_classe> } "}"
 
-<membro_classe>       ::= "var" <declaracao_variavel>
-                        | "func" <declaracao_funcao>
+<membro_classe>       ::= <atributo_classe> | <metodo_classe>
+<atributo_classe>     ::= "var" <IDENTIFIER> [ "=" <expressao> ] ";"
+<metodo_classe>       ::= "func" <IDENTIFIER> "(" [ <lista_parametros> ] ")" <bloco_seq>
 
 
 (* ─── COMANDOS ─── *)
 
 <comando> ::= <declaracao_variavel>
+            | <declaracao_classe>
+            | <declaracao_funcao>
             | <atribuicao>
             | <bloco_seq>
             | <bloco_par>
@@ -872,6 +885,7 @@ A seguir a gramática completa em formato BNF, em ordem de definição:
             | <comando_for>
             | <comando_print>
             | <comando_send>
+            | <comando_fork>
             | <comando_join>
             | <comando_return>
             | <comando_break>
@@ -886,9 +900,9 @@ A seguir a gramática completa em formato BNF, em ordem de definição:
 
 <comando_print>     ::= "print" "(" [ <expressao> { "," <expressao> } ] ")" ";"
 <comando_send>      ::= "send"  "(" <expressao> "," <expressao> ")" ";"
-<comando_return>    ::= "return" [ <expressao> ] ";"
-<comando_break>     ::= "break" ";"
-<comando_continue>  ::= "continue" ";"
+<comando_return>    ::= "return" ( <expressao> [ ";" ] | ";" )
+<comando_break>     ::= "break" [ ";" ]
+<comando_continue>  ::= "continue" [ ";" ]
 <comando_join>      ::= "join" "(" <expressao> ")" ";"
 
 
@@ -899,7 +913,9 @@ A seguir a gramática completa em formato BNF, em ordem de definição:
 
 <bloco_par> ::= "par" "{" { <comando> } "}"
 
-<expressao_fork> ::= "fork" ( <chamada_funcao> | <chamada_metodo> )
+<expressao_fork> ::= "fork" <expressao>
+(* o analisador semântico exige que a expressão seja chamada de função ou método *)
+<comando_fork>   ::= <expressao_fork> ";"
 <expressao_join> ::= "join" "(" <expressao> ")"
 
 
@@ -1014,6 +1030,8 @@ A seguir a gramática completa em formato BNF, em ordem de definição:
 <caractere_string> ::= <qualquer_char_exceto_aspas_e_barra>
                      | "\n" | "\t" | '\"' | "\\"
 
+(* Escape desconhecido: "\" seguido de outro caractere produz apenas esse caractere *)
+
 <letra>  ::= "A" | ... | "Z" | "a" | ... | "z"
 <digito> ::= "0" | ... | "9"
 
@@ -1025,7 +1043,7 @@ A seguir a gramática completa em formato BNF, em ordem de definição:
 ```
 ---
 
-## Notas de Implementação (2025) ATUALIZAR
+## Notas de Implementação (2026.2)
 
 ### Inferência de Tipos
 
@@ -1043,37 +1061,50 @@ O analisador semântico (`src/semantic.py`) usa inferência simples de tipos com
 | `input(...)` | `string` |
 | `new Classe(...)` | `Classe` |
 | `this` | nome da classe atual |
-| `op` relacional / lógico | `bool` |
+| `op` relacional / lógico, `!x` | `bool` |
 | `"a" + "b"` (concatenação) | `string` |
 | `to_string(x)`, `substr(s, i, n)` | `string` |
 | `s[i]` com `s` do tipo `string` | `string` |
-| `len(x)`, `to_number(s)` | `number` |
+| `len(x)`, `to_number(s)`, `exp(x)`, `random()` | `number` |
+| `range(...)`, `parse_ints(s)` | `list` |
+| `lista + x` (concatenação) | `list` |
+| `fork f(...)` | `task` |
+| `join(t)` | `unknown` |
+| `obj.metodo(...)` | `unknown` |
+| `obj.campo` | tipo declarado do atributo (classe conhecida) ou `unknown` |
 | Operação aritmética | `number` |
 | Identificador | tipo declarado na tabela de símbolos |
 | Desconhecido | `unknown` (compatível com qualquer tipo) |
 
 ### Regras Semânticas Verificadas
 
+Os erros saem em `stderr` no formato `[ERRO SEMANTICO] Linha N (Funcao: f): mensagem` (o trecho da função só aparece dentro de função). As mensagens do código não têm acentos.
+
 | Regra | Erro reportado |
 |-------|---------------|
-| Redeclaração no mesmo escopo | `Variável 'x' já declarada.` |
-| Uso antes de declaração | `Variável 'x' não declarada.` |
-| Incompatibilidade de tipos | `Tipo incompatível em atribuição de 'x'.` |
-| Função não declarada | `Função 'f' não declarada.` |
-| Aridade errada (função) | `Função 'f' espera N argumento(s), recebeu M.` |
-| Classe não declarada | `Classe 'C' não declarada.` |
-| Superclasse não declarada | `Superclasse 'S' não declarada.` |
-| Método inexistente | `Método 'm' não declarado em 'C'.` |
-| Atributo inexistente | `Atributo 'a' não declarado em 'C'.` |
-| `break`/`continue` fora de laço | `'break' usado fora de laço de repetição.` |
-| Aridade errada (`to_string` 1, `substr` 3) | `Função 'substr' espera 3 argumento(s), recebeu M.` |
-| Alterar caractere de texto (`s[i] = ...`) | `Não dá para alterar um caractere de texto com s[i] = ...; use substr e +.` |
+| Redeclaração no mesmo escopo | `Variavel 'x' ja declarada.` |
+| Uso antes de declaração | `Variavel 'x' nao declarada.` |
+| Tipo incompatível em declaração | `Tipo incompativel em 'x': esperado T, recebido U.` |
+| Tipo incompatível em atribuição | `Tipo incompativel em atribuicao de 'x'.` |
+| `- * / %` com operando não numérico | `Operador 'op' exige operandos numericos.` |
+| Função não declarada | `Funcao 'f' nao declarada.` |
+| Aridade errada (função) | `Funcao 'f' espera N argumento(s), recebeu M.` |
+| Aridade errada (`to_string` 1, `substr` 3) | `Funcao 'substr' espera 3 argumento(s), recebeu M.` |
+| Classe não declarada | `Classe 'C' nao declarada.` |
+| Superclasse não declarada | `Superclasse 'S' nao declarada.` |
+| Método inexistente | `Metodo 'm' nao declarado em 'C'.` |
+| Aridade errada (método) | `Metodo 'm' espera N argumento(s), recebeu M.` |
+| Atributo inexistente | `Atributo 'a' nao declarado em 'C'.` |
+| `break`/`continue` fora de laço | `'break' usado fora de laco.` |
+| Alterar caractere de texto (`s[i] = ...`) | `Nao da para alterar um caractere de texto com s[i] = ...; use substr e +.` |
+| `fork` sem chamada | `A expressao 'fork' exige uma chamada de funcao ou metodo.` |
+| `join` com argumento que não é tarefa | `A expressao 'join' exige um identificador de tarefa, recebido: 'T'.` |
 
 ### Geração de Código C++20
 
 | Construto MiniPar | Código C++ gerado |
 |-------------------|------------------|
-| `class C { ... }` | `class C { public: ... };` |
+| `class C extends S { ... }` | `class C : public S { public: ... };` (atributo com valor: `decltype(e) x = e;`; sem valor: `double x = 0;`) |
 | `new C(args)` | `std::make_shared<C>(args)` |
 | `obj.metodo(args)` | `obj->metodo(args)` |
 | `obj.campo` | `obj->campo` |
@@ -1093,5 +1124,48 @@ O analisador semântico (`src/semantic.py`) usa inferência simples de tipos com
 | `x[i]` (lista, matriz ou texto) | `__index(x, i)` |
 | `range(n)` | `__minipar_range(n)` |
 | `input(p)` | `input(p)` (helper C++) |
+| `var x = e;` / `tipo x = e;` | `auto x = e;` (sem valor: `auto x = 0;`) |
+| `fork f(args)` | `__fork([=]() mutable { return f(args); })`: roda em `std::async` e devolve o número da tarefa (`double`) |
+| `join(t)` | `__join(t)`: espera a tarefa e devolve o resultado (`double`) |
+| `parse_ints(s)` | `__parse_ints(s)` |
+| `lista.append(v)` / `.push_back(v)` | `lista.push_back(v)` |
+| `lista.pop()` | `__array_pop(lista)` |
+| `lista.size()` / `lista.size` | `lista.size()` |
+| `for (var x in c)` | `for (auto x : c)` |
+| `func f(a, b) { ... }` | `<ret> f(auto a, auto b) { ... }`; o tipo de retorno é inferido: `void` (sem `return valor`), `double` (se o retorno tem `/`, literal com ponto ou `join`) ou `auto` |
+
+### Geração de Código Intermediário (TAC)
+
+O gerador (`src/tac.py`) escreve `<nome>.tac` com código de três endereços. Temporários são `t0`, `t1`, ... e rótulos são `<PREFIXO>_<n>`.
+
+| Construto MiniPar | TAC gerado |
+|-------------------|-----------|
+| `a + b` (qualquer binário) | `t0 = a + b` |
+| `-a`, `!a` | `t0 = -a`, `t0 = !a` |
+| `var x = e;` / `x = e;` | `x = <e>` |
+| `[1, 2]` | `t0 = [1, 2]` |
+| `matrix(l, c, v)` | `t0 = matrix(l, c, v)` |
+| `x[i]` / `x[i] = v` | `t0 = x[i]` / `x[i] = v` |
+| `o.campo` / `o.campo = v` | `t0 = o.campo` / `o.campo = v` |
+| `f(a, b)` | `param a`, `param b`, `t0 = call f, 2` |
+| `o.m(a)` | `param a`, `t0 = call o.m, 1` |
+| `new C(...)` | `t0 = new C` (os argumentos não são emitidos) |
+| `fork f(a)` | `param a`, `t0 = spawn f, 1` |
+| `join(t)` | `t1 = join t` |
+| `c_channel(ip, p)` | `t0 = c_channel(ip, p)` |
+| `send(c, m)` / `receive(c)` | `send c, m` / `t0 = receive c` |
+| `input(p)` | `t0 = input(p)` |
+| `print a, b` | `print a`, `print b` |
+| `if` / `else` | `ifFalse c goto ELSE_n`, `goto ENDIF_n`, `ELSE_n:`, `ENDIF_n:` |
+| `while` | `WHILE_n:`, `ifFalse c goto ENDWHILE_n`, `goto WHILE_n`, `ENDWHILE_n:` |
+| `do ... while` | `DO_n:`, corpo, `if c goto DO_n`, `ENDDO_n:` |
+| `for` clássico | `FOR_n:`, `ifFalse c goto ENDFOR_n`, corpo, `FOR_STEP_n:`, incremento, `goto FOR_n`, `ENDFOR_n:` |
+| `break` / `continue` | `goto` para o rótulo de saída / de continuação do laço mais interno |
+| `func f(...) { ... }` | `func f:`, corpo, `endfunc f` |
+| `return e` | `return e` (ou `return`) |
+| `class C { ... }` | `# class C`, seguido dos métodos |
+| `seq { ... }` / `par { ... }` | comandos emitidos em ordem (o `par` não é paralelizado no TAC) |
+
+**Limitação:** o `for (var x in colecao)` emite apenas o comentário `# for x in colecao` e o corpo uma vez, sem expandir o laço.
 
 ---
