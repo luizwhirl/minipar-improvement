@@ -1,9 +1,9 @@
+# Entrada: tamanho do tapete, uma potencia de 3 entre 3 e 81.
 func preencher(tela, linha, coluna, tamanho) {
     if (tamanho == 1) {
         tela[linha][coluna] = "#";
         return tela;
     }
-
     var novo = tamanho / 3;
     var i = 0;
     while (i < 3) {
@@ -16,19 +16,21 @@ func preencher(tela, linha, coluna, tamanho) {
         }
         i = i + 1;
     }
-
     return tela;
 }
 
 seq {
     print("==== Teste adicional 2: tapete de Sierpinski ====");
-    var tamanho = 9;
-    var tela = matrix(tamanho, tamanho, " ");
-    tela = preencher(tela, 0, 0, tamanho);
-
-    var i = 0;
-    while (i < tamanho) {
-        print(tela[i]);
-        i = i + 1;
+    var tamanho = to_number(input("Tamanho do tapete (3, 9, 27 ou 81): "));
+    if (tamanho == 3 || tamanho == 9 || tamanho == 27 || tamanho == 81) {
+        var tela = matrix(tamanho, tamanho, " ");
+        tela = preencher(tela, 0, 0, tamanho);
+        var i = 0;
+        while (i < tamanho) {
+            print(tela[i]);
+            i = i + 1;
+        }
+    } else {
+        print("Entrada invalida: escolha 3, 9, 27 ou 81.");
     }
 }

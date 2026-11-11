@@ -7,7 +7,7 @@ from ast_nodes import (
     UnaryExpr, NumberExpr, StringExpr, BoolExpr, SeqBlock, ParBlock, IfStmt, WhileStmt,
     DoWhileStmt, ForStmt, BreakStmt, ContinueStmt, InputExpr,
     ClassDecl, FuncDecl, ReturnStmt, MethodCall, FuncCallExpr, PropertyAccess, PropertyAssign, NewExpr, ThisExpr,
-    CChannelExpr, SendStmt, ReceiveExpr, ListLiteral, MatrixCreateExpr, IndexExpr, IndexAssign
+    CChannelExpr, SendStmt, ReceiveExpr, ListLiteral, MatrixCreateExpr, IndexExpr, IndexAssign, ForkExpr, JoinExpr
 )
 
 @dataclass
@@ -19,6 +19,11 @@ class Symbol:
     methods: Dict[str, List[str]] = field(default_factory=dict)
 
 class SemanticAnalyzer:
+    # Funcoes que ja vem com a linguagem (nao precisam de func).
+    BUILTINS = ("exp", "random", "range", "len", "to_number", "parse_ints", "to_string", "substr")
+    # Quantos argumentos as funcoes de texto pedem.
+    BUILTIN_ARITY = {"to_string": 1, "substr": 3}
+
     def __init__(self) -> None:
         self._scopes: List[Dict[str, Symbol]] = []
         self._has_errors = False
@@ -47,8 +52,17 @@ class SemanticAnalyzer:
             if name in scope: return scope[name]
         return None
 
-    def _report(self, line: int, message: str) -> None:
-        print(f"[ERRO SEMANTICO] Linha {line}{self._get_context()}: {message}", file=sys.stderr)
+    # Codigos dos erros de fork/join (MINIP-30). Aparecem na mensagem como [SEM_FJ_01].
+    SEM_FJ_FORK_SEM_CHAMADA = "SEM_FJ_01"  # fork precisa de uma chamada: fork f(x)
+    SEM_FJ_JOIN_SEM_TAREFA = "SEM_FJ_02"   # join precisa de uma tarefa criada por fork
+    SEM_FJ_DESTINO = "SEM_FJ_03"           # fork ... on X: X precisa ser um c_channel
+    SEM_FJ_TEMPO = "SEM_FJ_04"             # join(t, ms): ms precisa ser numero
+    SEM_FJ_REMOTO_FUNCAO = "SEM_FJ_05"     # fork remoto so chama funcao global (func), nao metodo
+    SEM_FJ_REMOTO_ARGUMENTO = "SEM_FJ_06"  # fork remoto so envia numeros como argumento
+
+    def _report(self, line: int, message: str, code: Optional[str] = None) -> None:
+        tag = f" [{code}]" if code else ""
+        print(f"[ERRO SEMANTICO]{tag} Linha {line}{self._get_context()}: {message}", file=sys.stderr)
         self._has_errors = True
 
     def _infer_type(self, node: Optional[ASTNode]) -> str:
@@ -84,8 +98,19 @@ class SemanticAnalyzer:
         if isinstance(node, FuncCallExpr):
             if node.name in ("random", "exp"): return "number"
             if node.name in ("range", "parse_ints"): return "list"
+            if node.name in ("to_string", "substr"): return "string"
+            if node.name in ("len", "to_number"): return "number"
             return "unknown"
-        if isinstance(node, IndexExpr): return "unknown"
+        if isinstance(node, IndexExpr):
+            # s[i] em texto devolve um caractere (texto de 1 letra)
+            return "string" if self._infer_type(node.object) == "string" else "unknown"
+        
+        if isinstance(node, ForkExpr): 
+            return "task"
+        
+        if isinstance(node, JoinExpr): 
+            return "unknown"
+        
         return "unknown"
 
     def _types_compatible(self, declared: str, actual: str) -> bool:
@@ -142,6 +167,9 @@ class SemanticAnalyzer:
         elif isinstance(node, IndexAssign):
             self.validate_node(node.target)
             self.validate_node(node.value)
+            # Texto so pode ser lido por indice (s[i]); para mudar, monte outro texto.
+            if isinstance(node.target, IndexExpr) and self._infer_type(node.target.object) == "string":
+                self._report(node.line, "Nao da para alterar um caractere de texto com s[i] = ...; use substr e +.")
         elif isinstance(node, IdentifierExpr):
             if self._lookup(node.name) is None:
                 self._report(node.line, f"Variavel '{node.name}' nao declarada.")
@@ -220,8 +248,10 @@ class SemanticAnalyzer:
             self.validate_node(node.object)
             for arg in node.arguments: self.validate_node(arg)
         elif isinstance(node, FuncCallExpr):
-            if node.name not in self._functions and node.name not in ("exp", "random", "range", "len", "to_number", "parse_ints"):
+            if node.name not in self._functions and node.name not in self.BUILTINS:
                 self._report(node.line, f"Funcao '{node.name}' nao declarada.")
+            elif node.name not in self._functions and node.name in self.BUILTIN_ARITY and len(node.arguments) != self.BUILTIN_ARITY[node.name]:
+                self._report(node.line, f"Funcao '{node.name}' espera {self.BUILTIN_ARITY[node.name]} argumento(s), recebeu {len(node.arguments)}.")
             elif node.name in self._functions and len(self._functions[node.name].params) != len(node.arguments):
                 self._report(node.line, f"Funcao '{node.name}' espera {len(self._functions[node.name].params)} argumento(s), recebeu {len(node.arguments)}.")
             for arg in node.arguments: self.validate_node(arg)
@@ -246,6 +276,41 @@ class SemanticAnalyzer:
             pass
         elif isinstance(node, InputExpr):
             if node.prompt: self.validate_node(node.prompt)
+        elif isinstance(node, ForkExpr):
+            if not isinstance(node.function_call, (FuncCallExpr, MethodCall)):
+                self._report(node.line, "A expressao 'fork' exige uma chamada de funcao ou metodo.", code=self.SEM_FJ_FORK_SEM_CHAMADA)
+            self.validate_node(node.function_call)
+            if node.destination is not None:
+                self._validate_remote_fork(node)
+
+        elif isinstance(node, JoinExpr):
+            self.validate_node(node.task)
+            task_type = self._infer_type(node.task)
+            if task_type not in ("task", "unknown", "var"):
+                self._report(node.line, f"A expressao 'join' exige um identificador de tarefa, recebido: '{task_type}'.", code=self.SEM_FJ_JOIN_SEM_TAREFA)
+            if node.timeout is not None:
+                self.validate_node(node.timeout)
+                timeout_type = self._infer_type(node.timeout)
+                if timeout_type not in ("number", "int", "unknown", "var"):
+                    self._report(node.line, f"O tempo limite do 'join' deve ser um numero (milissegundos), recebido: '{timeout_type}'.", code=self.SEM_FJ_TEMPO)
+
+    def _validate_remote_fork(self, node: ForkExpr) -> None:
+        """Regras do fork que roda em outro computador: fork f(x) on canal."""
+        self.validate_node(node.destination)
+        dest_type = self._infer_type(node.destination)
+        if dest_type not in ("c_channel", "unknown", "var"):
+            self._report(node.line, f"O destino do 'fork ... on' deve ser um c_channel, recebido: '{dest_type}'.", code=self.SEM_FJ_DESTINO)
+        call = node.function_call
+        # O outro computador roda o mesmo programa e acha a tarefa pelo nome da funcao.
+        # Metodo de objeto ou funcao pronta (len, substr...) nao tem como ir pela rede.
+        if not isinstance(call, FuncCallExpr) or call.name not in self._functions:
+            self._report(node.line, "O 'fork ... on' so pode chamar uma funcao declarada com 'func' (nao metodo nem funcao pronta).", code=self.SEM_FJ_REMOTO_FUNCAO)
+            return
+        # Pela rede vao so numeros (o join tambem so devolve numero).
+        for arg in call.arguments:
+            arg_type = self._infer_type(arg)
+            if arg_type not in ("number", "int", "bool", "unknown", "var"):
+                self._report(node.line, f"O 'fork ... on' so envia numeros como argumento, recebido: '{arg_type}'.", code=self.SEM_FJ_REMOTO_ARGUMENTO)
 
     def analyze(self, program: Program) -> bool:
         self._collect_declarations(program)

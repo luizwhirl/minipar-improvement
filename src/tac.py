@@ -6,57 +6,8 @@ from ast_nodes import (
     UnaryExpr, NumberExpr, StringExpr, BoolExpr, IdentifierExpr, IfStmt, WhileStmt,
     DoWhileStmt, ForStmt, BreakStmt, ContinueStmt, InputExpr,
     ClassDecl, FuncDecl, ReturnStmt, MethodCall, FuncCallExpr, PropertyAccess, PropertyAssign, NewExpr, ThisExpr,
-    CChannelExpr, SendStmt, ReceiveExpr, ListLiteral, MatrixCreateExpr, IndexExpr, IndexAssign
+    CChannelExpr, SendStmt, ReceiveExpr, ListLiteral, MatrixCreateExpr, IndexExpr, IndexAssign, ForkExpr, JoinExpr
 )
-
-
-EXPECTED_QUICKSORT_TAC = """t0 = 0                    // início do array
-t1 = 4                    // fim do array
-S[0] = t0                 // empilha start
-S[1] = t1                 // empilha end
-sp = 2                  // topo da pilha (próxima posição livre)
-LOOP:
-  if sp == 0 goto END     // pilha vazia → fim
-  sp = sp - 1
-  t2 = S[sp]              // end
-  sp = sp - 1
-  t3 = S[sp]              // start
-  if t3 >= t2 goto LOOP   // intervalo inválido → ignora
-  t4 = A[t2]              // pivot = A[end]
-  t5 = t3 - 1             // i = start - 1
-  t6 = t3                 // j = start
-PARTITION_LOOP:
-  if t6 >= t2 goto PARTITION_END
-  t7 = A[t6]
-  if t7 <= t4 goto SWAP
-  t6 = t6 + 1
-  goto PARTITION_LOOP
-SWAP:
-  t5 = t5 + 1
-  t8 = A[t5]
-  A[t5] = A[t6]
-  A[t6] = t8
-  t6 = t6 + 1
-  goto PARTITION_LOOP
-PARTITION_END:
-  t5 = t5 + 1
-  t9 = A[t5]
-  A[t5] = A[t2]
-  A[t2] = t9
-  t10 = t5 - 1
-  S[sp] = t3              // empilha start
-  sp = sp + 1
-  S[sp] = t10             // empilha i - 1
-  sp = sp + 1
-  t11 = t5 + 1
-  S[sp] = t11             // empilha i + 1
-  sp = sp + 1
-  S[sp] = t2              // empilha end
-  sp = sp + 1
-  goto LOOP
-END:
-  // Array A[0..4] está ordenado
-"""
 
 
 class TACGenerator:
@@ -142,6 +93,26 @@ class TACGenerator:
             else:
                 self._emit(f"{tmp} = input()")
             return tmp
+        if isinstance(node, ForkExpr):
+            call_node = node.function_call
+            args = call_node.arguments
+            name = call_node.name if isinstance(call_node, FuncCallExpr) else f"{self._expr(call_node.object)}.{call_node.method_name}"
+            for arg in args:
+                self._emit(f"param {self._expr(arg)}")
+                
+            # fork ... on canal: o destino aparece no fim (spawn f, 1 on canal)
+            dest = f" on {self._expr(node.destination)}" if node.destination is not None else ""
+            tmp = self._temp()
+            self._emit(f"{tmp} = spawn {name}, {len(args)}{dest}")
+            return tmp
+
+        if isinstance(node, JoinExpr):
+            task_tmp = self._expr(node.task)
+            # join(t, ms): o tempo limite vira o segundo operando (join t, ms)
+            limit = f", {self._expr(node.timeout)}" if node.timeout is not None else ""
+            tmp = self._temp()
+            self._emit(f"{tmp} = join {task_tmp}{limit}")
+            return tmp
         return "?"
 
     def _stmt(self, node: Optional[ASTNode]) -> None:
@@ -220,17 +191,17 @@ class TACGenerator:
             self._emit(f"func {node.name}:")
             self._stmt(node.body)
             self._emit(f"endfunc {node.name}")
+        elif isinstance(node, (FuncCallExpr, MethodCall, ForkExpr, JoinExpr)):
+            self._expr(node)
 
     def generate_text(self, program: Program) -> str:
-        if any(isinstance(stmt, FuncDecl) and stmt.name == "quicksort_iterativo" for stmt in program.statements):
-            return EXPECTED_QUICKSORT_TAC
         for stmt in program.statements:
             self._stmt(stmt)
         return "\n".join(self.lines) + ("\n" if self.lines else "")
 
-    def generate(self, program: Program, output_name: str) -> str:
-        os.makedirs("output", exist_ok=True)
-        tac_path = os.path.join("output", f"{output_name}.tac")
+    def generate(self, program: Program, output_name: str, output_dir: str = "output") -> str:
+        os.makedirs(output_dir, exist_ok=True)
+        tac_path = os.path.join(output_dir, f"{output_name}.tac")
         text = self.generate_text(program)
         with open(tac_path, "w", encoding="utf-8") as f:
             f.write(text)

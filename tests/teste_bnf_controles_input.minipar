@@ -1,24 +1,36 @@
+# Entradas: nome, limite do for (inteiro de 0 a 1000), limite de tentativas (1 a 1000).
 func ler_nome() {
     var nome = input("Nome: ");
     return nome;
 }
 
-seq {
-    var soma = 0;
-    for (var i = 0; i < 5; i = i + 1) {
-        if (i == 3) {
-            continue;
-        }
-        soma = soma + i;
+func inteiro_ate(valor, minimo, maximo) {
+    var candidato = minimo;
+    while (candidato <= maximo) {
+        if (valor == candidato) { return true; }
+        candidato = candidato + 1;
     }
+    return false;
+}
 
-    var tentativas = 0;
-    do {
-        tentativas = tentativas + 1;
-        if (tentativas == 2) {
-            break;
+seq {
+    var nome = ler_nome();
+    var limite = to_number(input("Limite do for (inteiro de 0 a 1000): "));
+    var limite_tentativas = to_number(input("Limite de tentativas (inteiro de 1 a 1000): "));
+    if (inteiro_ate(limite, 0, 1000) && inteiro_ate(limite_tentativas, 1, 1000)) {
+        var soma = 0;
+        for (var i = 0; i < limite; i = i + 1) {
+            if (i == 3) { continue; }
+            soma = soma + i;
         }
-    } while (tentativas < 10);
-
-    print("Controle OK:", soma, tentativas);
+        var tentativas = 0;
+        do {
+            tentativas = tentativas + 1;
+            if (tentativas == limite_tentativas) { break; }
+        } while (tentativas < 1000);
+        print("Nome recebido:", nome);
+        print("Controle OK:", soma, tentativas);
+    } else {
+        print("Entrada invalida: informe limites inteiros nos intervalos solicitados.");
+    }
 }

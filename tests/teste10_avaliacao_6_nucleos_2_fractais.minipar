@@ -1,0 +1,254 @@
+# Teste 10: 6 núcleos, avaliação de atividades e 2 fractais (fork/join)
+# Baseado no script Python "Teste10-Nucleos-AvaliacaoAtiv-e-2Fractais".
+# Núcleos 1 a 4 corrigem as 160 atividades, o núcleo 5 calcula o Mandelbrot
+# e o núcleo 6 desenha o tapete de Sierpinski (em ASCII; no Python é turtle).
+
+# ------------------------------------------------------------------
+# PASSO 1: RECURSOS NATIVOS
+# ------------------------------------------------------------------
+
+# Simula o tempo de correção gastando CPU (no Python: simular_atraso).
+# A soma é devolvida e usada depois, para o g++ (-O3) não apagar o laço.
+func simular_atraso(iteracoes) {
+    var soma = 0.0;
+    var i = 0;
+    while (i < iteracoes) {
+        soma = soma + i;
+        i = i + 1;
+    }
+    return soma;
+}
+
+# Sorteio fixo do tempo de correção (no Python: meu_random_uniforme).
+# Cada atividade tem sempre o mesmo tempo, entre 0.05 e 0.15 "segundos",
+# assim a saída é igual em toda execução, mesmo com várias threads.
+func tempo_correcao(indice) {
+    var estado = ((indice * 1103) + 12345) % 65536;
+    return 0.05 + (0.10 * (estado / 65535.0));
+}
+
+# Nome de cada avaliador (no Python: lista AVALIADORES)
+func nome_avaliador(id) {
+    if (id == 0) { return "Professor"; }
+    if (id == 1) { return "Monitor 1"; }
+    if (id == 2) { return "Monitor 2"; }
+    return "Monitor 3";
+}
+
+# ------------------------------------------------------------------
+# PASSO 3: FUNÇÕES DE TRABALHO DOS NÚCLEOS
+# ------------------------------------------------------------------
+
+# Corrige uma atividade. Devolve 1 quando terminou.
+func avaliar_atividade(indice) {
+    var soma = simular_atraso(tempo_correcao(indice) * 15000000);
+    if (soma < indice) { return 0; }
+    return 1;
+}
+
+# Trabalho de um núcleo: corrige as atividades de "inicio" até "fim - 1"
+# e devolve quantas corrigiu (o join só devolve número).
+func trabalhador_nucleo(inicio, fim) {
+    var corrigidas = 0;
+    var indice = inicio;
+    while (indice < fim) {
+        corrigidas = corrigidas + avaliar_atividade(indice);
+        indice = indice + 1;
+    }
+    return corrigidas;
+}
+
+# Caractere de cada faixa de iterações (no Python: " .:-=+#%@")
+func caractere(faixa) {
+    if (faixa == 0) { return " "; }
+    if (faixa == 1) { return "."; }
+    if (faixa == 2) { return ":"; }
+    if (faixa == 3) { return "-"; }
+    if (faixa == 4) { return "="; }
+    if (faixa == 5) { return "+"; }
+    if (faixa == 6) { return "#"; }
+    if (faixa == 7) { return "%"; }
+    return "@";
+}
+
+# Núcleo 5: calcula e imprime o fractal de Mandelbrot em ASCII.
+# Devolve quantos pontos ficaram dentro do conjunto.
+# "mostrar" = 1 imprime o desenho; 0 só calcula (modo sequencial).
+func trabalhador_mandelbrot(largura, altura, max_iter, mostrar) {
+    var tela = matrix(altura, largura, " ");
+    var dentro = 0;
+    var y = 0;
+    while (y < altura) {
+        # Mapeia Y para o plano complexo [-1.2, 1.2]
+        var cy = ((y * 2.4) / altura) - 1.2;
+        var x = 0;
+        while (x < largura) {
+            # Mapeia X para o plano complexo [-2.0, 1.0]
+            var cx = ((x * 3.0) / largura) - 2.0;
+
+            # Equação do fractal: z = z^2 + c
+            var zx = 0.0;
+            var zy = 0.0;
+            var iteracao = 0;
+            while ((((zx * zx) + (zy * zy)) <= 4.0) && (iteracao < max_iter)) {
+                var tmp = ((zx * zx) - (zy * zy)) + cx;
+                zy = ((2.0 * zx) * zy) + cy;
+                zx = tmp;
+                iteracao = iteracao + 1;
+            }
+            if (iteracao == max_iter) { dentro = dentro + 1; }
+
+            # Mapeia o número de iterações para um caractere (9 caracteres)
+            tela[y][x] = caractere((iteracao * 8) / max_iter);
+            x = x + 1;
+        }
+        y = y + 1;
+    }
+
+    if (mostrar == 1) {
+        print("=== FRACTAL DE MANDELBROT (Gerado pelo Nucleo 5) ===");
+        var linha = 0;
+        while (linha < altura) {
+            print(tela[linha]);
+            linha = linha + 1;
+        }
+        print("====================================================");
+    }
+    return dentro;
+}
+
+# Núcleo 6: tapete de Sierpinski. No Python ele é desenhado com turtle;
+# aqui sai em ASCII. Começa com a grade cheia (1) e "perfura" os
+# centros (0), como o desenhar_tapete_sierpinski do Python.
+func perfurar(grade, linha, coluna, lado, grau) {
+    if (grau <= 0) {
+        return grade;
+    }
+    var terco = lado / 3;
+
+    # Apaga o quadrado central
+    var i = linha + terco;
+    while (i < (linha + (2 * terco))) {
+        var j = coluna + terco;
+        while (j < (coluna + (2 * terco))) {
+            grade[i][j] = 0;
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+
+    # Chamadas recursivas para os 8 quadrados em volta
+    var a = 0;
+    while (a < 3) {
+        var b = 0;
+        while (b < 3) {
+            if (!((a == 1) && (b == 1))) {
+                grade = perfurar(grade, linha + (a * terco), coluna + (b * terco), terco, grau - 1);
+            }
+            b = b + 1;
+        }
+        a = a + 1;
+    }
+    return grade;
+}
+
+# Monta, imprime e devolve quantas casas ficaram cheias.
+func trabalhador_sierpinski(grau) {
+    var lado = 1;
+    var g = 0;
+    while (g < grau) {
+        lado = lado * 3;
+        g = g + 1;
+    }
+    var grade = matrix(lado, lado, 1);
+    grade = perfurar(grade, 0, 0, lado, grau);
+    var tela = matrix(lado, lado, " ");
+
+    print("=== TAPETE DE SIERPINSKI (Gerado pelo Nucleo 6) ===");
+    var cheias = 0;
+    var i = 0;
+    while (i < lado) {
+        var j = 0;
+        while (j < lado) {
+            if (grade[i][j] == 1) {
+                tela[i][j] = "#";
+                cheias = cheias + 1;
+            }
+            j = j + 1;
+        }
+        print(tela[i]);
+        i = i + 1;
+    }
+    print("===================================================");
+    return cheias;
+}
+
+# ------------------------------------------------------------------
+# PASSO 4: EXECUÇÃO SEQUENCIAL E PARALELA (FORK & JOIN)
+# ------------------------------------------------------------------
+seq {
+    # PASSO 2: cenário (40 alunos x 4 atividades = 160 atividades)
+    var num_alunos = 40;
+    var atividades_por_aluno = 4;
+    var total_atividades = num_alunos * atividades_por_aluno;
+    var num_avaliadores = 4;
+
+    print("Carga de Trabalho:", total_atividades, "atividades + Mandelbrot (ASCII) + Sierpinski (ASCII)");
+    print("");
+
+    # --- 1. Modo sequencial: 1 núcleo (Professor) corrige tudo ---
+    print("--- 1. Executando Modo Sequencial (Apenas 1 Nucleo / Professor) ---");
+    var corrigidas_seq = trabalhador_nucleo(0, total_atividades);
+    var pontos_seq = trabalhador_mandelbrot(50, 20, 100, 0);
+    print("[Professor] Corrigiu", corrigidas_seq, "atividades e calculou o fractal");
+    print("");
+
+    # --- 2. Modo paralelo: 1 núcleo para cada avaliador ---
+    print("--- 2. Executando Modo Paralelo (6 Nucleos Dedicados) ---");
+    var tamanho_fatia = total_atividades / num_avaliadores;
+
+    # ETAPA 1: FOR DE ALOCAÇÃO (fork dispara 1 tarefa por avaliador)
+    var nucleos = [];
+    for (var n in range(num_avaliadores)) {
+        nucleos.append(fork trabalhador_nucleo(n * tamanho_fatia, (n + 1) * tamanho_fatia));
+    }
+    # 5º núcleo: fractal de Mandelbrot
+    var nucleo_fractal = fork trabalhador_mandelbrot(50, 20, 100, 1);
+
+    # O join do fractal vem primeiro: ele imprime o desenho, e o programa
+    # principal só volta a imprimir depois que ele terminar.
+    var pontos_par = join(nucleo_fractal);
+    print("");
+
+    # ETAPA 2: FOR DE SINCRONIZAÇÃO (join espera cada núcleo e junta o resultado)
+    var corrigidas_par = 0;
+    var id = 0;
+    for (var tarefa in nucleos) {
+        var feitas = join(tarefa);
+        print(nome_avaliador(id), "corrigiu", feitas, "atividades");
+        corrigidas_par = corrigidas_par + feitas;
+        id = id + 1;
+    }
+    print("");
+
+    # 6º núcleo: tapete de Sierpinski (como no Python, depois dos outros 5)
+    var nucleo_tapete = fork trabalhador_sierpinski(3);
+    var casas_cheias = join(nucleo_tapete);
+    print("");
+
+    print("==========================================");
+    print("         RESULTADO DA AVALIACAO           ");
+    print("==========================================");
+    print("Atividades (sequencial) :", corrigidas_seq);
+    print("Atividades (paralelo)   :", corrigidas_par);
+    print("Pontos no fractal (seq) :", pontos_seq);
+    print("Pontos no fractal (par) :", pontos_par);
+    print("Casas cheias no tapete  :", casas_cheias);
+    print("Nucleos no paralelo     :", num_avaliadores + 2);
+    if ((corrigidas_seq == corrigidas_par) && (pontos_seq == pontos_par)) {
+        print("Os dois modos deram o mesmo resultado.");
+    } else {
+        print("ERRO: os modos deram resultados diferentes.");
+    }
+    print("==========================================");
+}

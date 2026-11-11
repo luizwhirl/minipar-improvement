@@ -1,246 +1,481 @@
 document.addEventListener("DOMContentLoaded", () => {
-    const editorMinipar = CodeMirror.fromTextArea(document.getElementById("editor-minipar"), {
-        mode: "clike",
-        theme: "dracula",
-        lineNumbers: true,
-        autoCloseBrackets: true
+    const byId = id => document.getElementById(id);
+    const source = byId("editor-minipar");
+    const editor = window.CodeMirror?.fromTextArea(source, {
+        mode: "text/x-c++src", theme: "dracula", lineNumbers: true,
+        indentUnit: 4, lineWrapping: true,
+        screenReaderLabel: source.getAttribute("aria-label")
+    });
+    const getCode = () => editor?.getValue ? editor.getValue() : source.value;
+    function setCode(code) {
+        if (editor?.setValue) editor.setValue(code);
+        else source.value = code;
+    }
+    const examples = byId("examples");
+    const terminalOutput = byId("terminal-output");
+    const file = byId("current-file");
+    const run = byId("btn-run");
+    const download = byId("btn-download");
+    const executableLink = byId("executable-link");
+    const programInputs = byId("program-inputs");
+    const compilerLog = byId("compiler-log");
+    const compilerOutput = byId("compiler-output");
+    const clear = byId("btn-clear");
+    const tabs = Array.from(document.querySelectorAll('[role="tab"]'));
+    const executionTab = byId("tab-exec");
+    const armTab = byId("tab-arm");
+    const armFeedback = byId("arm-feedback");
+    const armCode = byId("arm-code");
+    const armDownload = byId("arm-download");
+    const openTest11 = byId("btn-open-t11");
+    const armMessages = {
+        waiting: "Execute um programa que imprima o Assembly entre as marcas para ver o código aqui.",
+        missing: "A última execução não imprimiu Assembly ARM entre as linhas === INICIO ARM === e === FIM ARM ===.",
+        unclosed: "A saída tem a linha === INICIO ARM ===, mas falta a linha === FIM ARM ===. Confira se o programa terminou.",
+        repeated: "A saída tem mais de um bloco de Assembly ARM. Deixe só um bloco para poder baixar o arquivo."
+    };
+    const results = document.querySelector(".results");
+    const phases = ["tokens", "ast", "semantic", "tac", "cpp"];
+    const phaseNames = {
+        tokens: "Análise léxica", ast: "Análise sintática",
+        semantic: "Análise semântica", tac: "Geração de TAC", cpp: "Geração de C++"
+    };
+    const phasePrompts = {
+        tokens: "Selecione Tokens para analisar o código atual.",
+        ast: "Selecione AST para analisar a estrutura do código atual.",
+        semantic: "Selecione Semântica para verificar o código atual.",
+        tac: "Selecione TAC para gerar o código intermediário.",
+        cpp: "Selecione Código C++ para gerar a tradução do programa."
+    };
+    const loadingMessages = {
+        tokens: "Reconhecendo tokens…", ast: "Construindo a árvore sintática…",
+        semantic: "Verificando a semântica…", tac: "Gerando TAC…", cpp: "Gerando código C++…"
+    };
+    const phaseViews = Object.fromEntries(phases.map(phase => [phase, {
+        panel: byId(`out-${phase}`), feedback: byId(`${phase}-feedback`),
+        diagnostics: byId(`${phase}-diagnostics`),
+        content: byId({ tac: "tac-code", cpp: "cpp-code" }[phase] || `${phase}-result`)
+    }]));
+    const phaseCache = new Map();
+    let spec = null;
+    let executionStatus = "Pronto";
+    let sourceRevision = 0;
+    let analysisSequence = 0;
+    let activeAnalysis = null;
+    let executionBusy = false;
+    let monitoring = false;
+    let loadingExample = false;
+    let astViewer = null;
+    let astSource = null;
+    let inputMode = "reads";
+    let test11File = null;
+    let armUrl = null;
+
+    const controlsBusy = () => executionBusy || monitoring || loadingExample;
+
+    function showTab(selected, revealResult = false) {
+        for (const tab of tabs) {
+            const active = tab === selected;
+            tab.setAttribute("aria-selected", String(active));
+            tab.tabIndex = active ? 0 : -1;
+            byId(tab.getAttribute("aria-controls")).hidden = !active;
+        }
+        if (revealResult && window.matchMedia("(max-width: 800px)").matches) {
+            results.scrollIntoView({ block: "nearest" });
+        }
+    }
+    tabs.forEach((tab, index) => {
+        tab.onclick = () => activateTab(tab, true);
+        tab.onkeydown = event => {
+            const next = { ArrowRight: (index + 1) % tabs.length,
+                ArrowLeft: (index + tabs.length - 1) % tabs.length,
+                Home: 0, End: tabs.length - 1 }[event.key];
+            if (next === undefined) return;
+            event.preventDefault();
+            activateTab(tabs[next]);
+            tabs[next].focus();
+        };
     });
 
-    const editorCpp = CodeMirror.fromTextArea(document.getElementById("editor-cpp"), {
-        mode: "text/x-c++src",
-        theme: "dracula",
-        lineNumbers: true,
-        readOnly: true
-    });
+    function status(label, forExecution = false) {
+        if (forExecution) executionStatus = label;
+        byId("status").textContent = label;
+        byId("status").dataset.state = label === "Erro" ? "error" : "ready";
+    }
+    function syncControls() {
+        const value = controlsBusy();
+        run.disabled = download.disabled = clear.disabled = examples.disabled = value;
+        openTest11.disabled = value || !test11File;
+        programInputs.disabled = value || inputMode === "none";
+        source.readOnly = value;
+        editor?.setOption?.("readOnly", value);
+        results.setAttribute("aria-busy", String(value));
+    }
 
-    const editorTac = CodeMirror.fromTextArea(document.getElementById("editor-tac"), {
-        mode: "clike",
-        theme: "dracula",
-        lineNumbers: true,
-        readOnly: true
-    });
+    function setInputMode(mode, message) {
+        inputMode = mode;
+        byId("inputs-help").textContent = message;
+        programInputs.disabled = controlsBusy() || mode === "none";
+    }
 
-    const testList         = document.getElementById("test-list");
-    const currentFileLabel = document.getElementById("current-file");
-    const terminalOutput   = document.getElementById("terminal-output");
-    const btnRun           = document.getElementById("btn-run");
-    const btnClear         = document.getElementById("btn-clear");
-    const tabs             = document.querySelectorAll(".tab");
-
-    let currentTestSpec = null;
-    let progressPollTimer = null;
-    let lastLogCount = 0;
-    let isSessionJoiner = false;
-
-    function stopProgressPoll() {
-        if (progressPollTimer) {
-            clearInterval(progressPollTimer);
-            progressPollTimer = null;
+    function destroyASTViewer() {
+        const previous = astViewer;
+        astViewer = null;
+        astSource = null;
+        try {
+            previous?.destroy();
+        } catch {
+            // Keep clearing obsolete results if a visual control could not close.
         }
     }
 
-    function formatProgressPanel(data) {
-        const session = data.session;
-        if (!session) return "";
-
-        const myRole = session.participants?.find(
-            p => p.terminal_id === data.terminal_id
-        )?.role || "participante";
-
-        const percent = session.progress_percent ?? 0;
-        const filled = Math.floor(percent / 5);
-        const bar = "█".repeat(filled) + "░".repeat(20 - filled);
-
-        let text =
-            "══ TERMINAL PARTICIPANTE — MONITOR DE PROGRESSO ══\n\n" +
-            `Terminal : ${data.terminal_id}\n` +
-            `Papel    : ${myRole}\n` +
-            `Teste    : ${session.titulo || session.test_file}\n` +
-            `Status   : ${session.phase_message || session.status}\n` +
-            `[${bar}] ${percent}%\n\n` +
-            "── LOG DE ATIVIDADE ──\n";
-
-        (session.progress_log || []).forEach(entry => {
-            const prefix = entry.source === "initiator" ? "→" : "•";
-            text += `${prefix} [${entry.time}] ${entry.message}\n`;
-        });
-
-        if (session.execution_output) {
-            text += "\n── SAÍDA DO INICIADOR ──\n";
-            session.execution_output.trim().split("\n").slice(-6).forEach(line => {
-                text += `  ${line}\n`;
-            });
-        }
-
-        if (session.status === "completed") {
-            text += "\n✓ Teste concluído pelo terminal iniciador.\n";
-            stopProgressPoll();
-        }
-
-        return text;
+    function resetPhase(phase, message = phasePrompts[phase], preserveContent = false) {
+        const view = phaseViews[phase];
+        view.panel.removeAttribute("aria-busy");
+        view.feedback.className = "phase-feedback";
+        view.feedback.textContent = message;
+        view.diagnostics.replaceChildren();
+        view.diagnostics.hidden = true;
+        if (preserveContent) return;
+        if (phase === "ast") destroyASTViewer();
+        view.content.replaceChildren();
+        view.content.hidden = true;
     }
 
-    function startProgressPoll() {
-        stopProgressPoll();
-        isSessionJoiner = true;
-        lastLogCount = 0;
-
-        progressPollTimer = setInterval(() => {
-            fetch("/api/session")
-                .then(res => res.json())
-                .then(data => {
-                    if (!data.active || !data.session) {
-                        stopProgressPoll();
-                        return;
-                    }
-
-                    const logLen = (data.session.progress_log || []).length;
-                    if (logLen !== lastLogCount || data.session.status === "completed") {
-                        terminalOutput.textContent = formatProgressPanel(data);
-                        lastLogCount = logLen;
-                    }
-
-                    if (data.session.status === "completed") {
-                        isSessionJoiner = false;
-                    }
-                });
-        }, 500);
+    function cancelAnalysis() {
+        analysisSequence++;
+        const pending = activeAnalysis;
+        activeAnalysis = null;
+        if (!pending) return;
+        pending.controller.abort();
+        resetPhase(pending.phase);
     }
 
-    tabs.forEach(tab => {
-        tab.addEventListener("click", () => {
-            tabs.forEach(t => t.classList.remove("active"));
-            document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
-            tab.classList.add("active");
-            document.getElementById(tab.dataset.target).classList.add("active");
-            editorCpp.refresh();
-            editorTac.refresh();
-        });
-    });
-
-    // Verifica sessão multi-terminal ativa ao carregar a IDE
-    fetch("/api/session")
-        .then(res => res.json())
-        .then(data => {
-            if (data.active && data.needs_choice) {
-                showSessionChoiceDialog(data);
-            } else if (data.active) {
-                const isParticipant = data.session.participants?.some(
-                    p => p.terminal_id === data.terminal_id
-                );
-                if (isParticipant && data.session.status !== "completed") {
-                    startProgressPoll();
-                } else {
-                    terminalOutput.textContent =
-                        `[Sessão ativa] Teste: ${data.session.titulo || data.session.test_file}\n` +
-                        `Terminal: ${data.terminal_id}\n` +
-                        `Participantes: ${data.session.participants.length}/${data.session.required_participants}`;
-                }
-            }
-        });
-
-    function showSessionChoiceDialog(sessionData) {
-        const session = sessionData.session;
-        const msg =
-            `Teste em andamento: ${session.titulo || session.test_file}\n` +
-            `Participantes: ${session.participants.length}/${session.required_participants}\n` +
-            `Seu terminal: ${sessionData.terminal_id}\n\n` +
-            `Deseja participar deste teste ou executar de forma independente?`;
-
-        if (confirm(msg + "\n\nOK = Participar do teste\nCancelar = Modo independente")) {
-            fetch("/api/session/join", { method: "POST" })
-                .then(res => res.json())
-                .then(result => {
-                    if (result.success) {
-                        const role = result.session.participants.slice(-1)[0].role;
-                        terminalOutput.textContent =
-                            `[OK] Você entrou como: ${role}\nIniciando monitor de progresso...\n`;
-                        startProgressPoll();
-                    }
-                });
-        }
+    function clearPhaseResults() {
+        cancelAnalysis();
+        phaseCache.clear();
+        phases.forEach(phase => resetPhase(phase));
     }
 
-    fetch("/api/tests")
-        .then(res => res.json())
-        .then(data => {
-            data.tests.forEach(test => {
-                const li = document.createElement("li");
-                li.textContent = test;
-                li.onclick = () => loadTest(test, li);
-                testList.appendChild(li);
-            });
-        });
-
-    function loadTestSpec(filename) {
-        return fetch("/api/test_spec", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ filename })
-        })
-        .then(res => res.json())
-        .then(spec => {
-            currentTestSpec = spec.titulo ? spec : null;
-            return currentTestSpec;
-        });
-    }
-
-    function loadTest(filename, element) {
-        document.querySelectorAll(".test-list li").forEach(li => li.classList.remove("active"));
-        if (element) element.classList.add("active");
-
-        currentFileLabel.textContent = filename;
-        terminalOutput.textContent = `Carregando ${filename}...`;
+    function resetResults(message, selectExecution = true, clearPhases = true) {
+        if (clearPhases) clearPhaseResults();
+        else cancelAnalysis();
+        if (selectExecution) showTab(executionTab);
+        executionStatus = "Pronto";
+        terminalOutput.textContent = message;
         terminalOutput.classList.remove("error-text");
-
-        Promise.all([
-            fetch("/api/get_test", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ filename })
-            }).then(res => res.json()),
-            loadTestSpec(filename)
-        ]).then(([data, spec]) => {
-            if (data.code) {
-                editorMinipar.setValue(data.code);
-                editorCpp.setValue("");
-                editorTac.setValue("");
-
-                let info = "Arquivo carregado. Clique em 'Compile & Run'.";
-                if (spec) {
-                    const tags = [];
-                    if (spec.requires_input) tags.push(`${spec.input_count || spec.inputs.length} input(s)`);
-                    if (spec.multi_computer) tags.push(`${spec.multi_computer.count} terminais`);
-                    if (tags.length) info += `\n[${tags.join(" | ")}]`;
-                }
-                terminalOutput.textContent = info;
-            }
-        });
+        compilerLog.hidden = true;
+        compilerLog.open = false;
+        compilerOutput.textContent = "";
+        resetArm();
     }
 
-    async function collectInputs(spec) {
-        if (!spec || !spec.requires_input || !spec.inputs.length) return [];
+    function resetArm(message = armMessages.waiting) {
+        if (armUrl) URL.revokeObjectURL(armUrl);
+        armUrl = null;
+        armDownload.hidden = true;
+        armDownload.removeAttribute("href");
+        armDownload.removeAttribute("download");
+        armCode.textContent = "";
+        armCode.hidden = true;
+        armFeedback.className = "phase-feedback";
+        armFeedback.textContent = message;
+        armTab.classList.remove("has-arm");
+    }
 
-        let msg =
-            `${spec.titulo}\n\n` +
-            `Este programa possui ${spec.input_count || spec.inputs.length} entrada(s) input().\n` +
-            `Informe os valores que serão enviados ao programa:\n\n`;
-        spec.inputs.forEach((inp, i) => {
-            const desc = inp.descricao || inp.prompt || `Entrada ${i + 1}`;
-            msg += `[${i + 1}] ${desc}\n`;
-        });
-        alert(msg);
-
-        const collected = [];
-        for (let i = 0; i < spec.inputs.length; i++) {
-            const inp = spec.inputs[i];
-            const desc = inp.descricao || inp.prompt || `Entrada ${i + 1}`;
-            const valor = prompt(`${desc}\n\nDigite o valor:`);
-            if (valor === null) return null;
-            collected.push(valor.trim());
+    // Procura o Assembly na saída do programa e libera o download do .arm.
+    function showArm(output, filename) {
+        const found = window.MiniParArmExtract.extract(output);
+        if (found.status !== "found") {
+            resetArm(armMessages[found.status]);
+            if (found.status !== "missing") armFeedback.classList.add("is-error");
+            return;
         }
-        return collected;
+        resetArm();
+        const name = window.MiniParArmExtract.armFilename(filename);
+        armUrl = URL.createObjectURL(new Blob([found.code], { type: "text/plain;charset=utf-8" }));
+        armDownload.href = armUrl;
+        armDownload.download = name;
+        armDownload.textContent = `Baixar ${name}`;
+        armDownload.hidden = false;
+        armCode.textContent = found.code;
+        armCode.hidden = false;
+        armFeedback.classList.add("is-success");
+        const lines = found.code.split("\n").length - 1;
+        armFeedback.textContent = `Assembly ARMv7 encontrado na última execução (${lines} ${lines === 1 ? "linha" : "linhas"}).`;
+        armTab.classList.add("has-arm");
     }
+
+    function clearExecutable() {
+        executableLink.hidden = true;
+        executableLink.removeAttribute("href");
+        executableLink.removeAttribute("download");
+    }
+
+    function showExecutable(data, startDownload = false) {
+        if (!data.success || typeof data.download_url !== "string") return;
+        const url = new URL(data.download_url, window.location.href);
+        if (url.origin !== window.location.origin || !url.pathname.startsWith("/api/")) return;
+        executableLink.href = url.href;
+        executableLink.download = data.filename || "programa";
+        executableLink.hidden = false;
+        if (startDownload) executableLink.click();
+    }
+
+    function appendOutput(text) {
+        const panel = byId("out-exec");
+        const follow = panel.scrollHeight - panel.scrollTop - panel.clientHeight < 64;
+        terminalOutput.append(document.createTextNode(text));
+        if (follow) panel.scrollTop = panel.scrollHeight;
+    }
+
+    async function post(url, body, signal) {
+        const response = await fetch(url, { method: "POST",
+            headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Falha na solicitação.");
+        return data;
+    }
+    function showError(error) {
+        if (monitoring) return;
+        cancelAnalysis();
+        status("Erro", true);
+        showTab(executionTab);
+        terminalOutput.classList.add("error-text");
+        terminalOutput.textContent = error.message;
+    }
+
+    function invalidateResults() {
+        sourceRevision++;
+        spec = null;
+        clearExecutable();
+        setInputMode("unknown", "Se o código usa input(), preencha uma linha por leitura antes de executar.");
+        resetResults("Código alterado. Execute novamente para atualizar os resultados.", false);
+        if (!controlsBusy()) status("Código alterado", true);
+    }
+    if (editor?.on) editor.on("change", invalidateResults);
+    else source.addEventListener("input", invalidateResults);
+
+    function renderDiagnostics(phase, diagnostics) {
+        const container = phaseViews[phase].diagnostics;
+        container.replaceChildren();
+        container.hidden = !diagnostics.length;
+        if (!diagnostics.length) return;
+        const list = document.createElement("ul");
+        list.className = "diagnostic-list";
+        for (const diagnostic of diagnostics) {
+            const item = document.createElement("li");
+            const location = document.createElement("strong");
+            let label = phaseNames[diagnostic.phase] || "Análise";
+            if (Number.isInteger(diagnostic.line) && diagnostic.line > 0) {
+                label += ` · linha ${diagnostic.line}`;
+                if (Number.isInteger(diagnostic.column) && diagnostic.column > 0) {
+                    label += `, coluna ${diagnostic.column}`;
+                }
+            }
+            location.textContent = label;
+            const message = document.createElement("p");
+            message.textContent = diagnostic.message;
+            item.append(location, message);
+            list.append(item);
+        }
+        container.append(list);
+    }
+
+    function renderTokens(container, tokens) {
+        const scroller = document.createElement("div");
+        scroller.className = "table-scroll";
+        scroller.tabIndex = 0;
+        scroller.setAttribute("role", "region");
+        scroller.setAttribute("aria-label", "Tabela de tokens");
+        const table = document.createElement("table");
+        table.className = "token-table";
+        const caption = document.createElement("caption");
+        caption.textContent = "Tokens do código atual";
+        const head = document.createElement("thead");
+        const headings = document.createElement("tr");
+        for (const label of ["Tipo", "Lexema", "Linha", "Coluna"]) {
+            const cell = document.createElement("th");
+            cell.scope = "col";
+            cell.textContent = label;
+            headings.append(cell);
+        }
+        head.append(headings);
+        const body = document.createElement("tbody");
+        for (const token of tokens) {
+            const row = document.createElement("tr");
+            if (token.type === "UNKNOWN") row.className = "token-error";
+            for (const value of [token.type, JSON.stringify(token.lexeme), token.line, token.column]) {
+                const cell = document.createElement("td");
+                cell.textContent = value;
+                row.append(cell);
+            }
+            body.append(row);
+        }
+        table.append(caption, head, body);
+        scroller.append(table);
+        container.append(scroller);
+    }
+
+    function renderAST(ast) {
+        const host = phaseViews.ast.content;
+        host.hidden = false;
+        if (astSource === ast && host.hasChildNodes()) return;
+        destroyASTViewer();
+        host.replaceChildren();
+        astSource = ast;
+        try {
+            if (!window.MiniParASTViewer?.mount) throw new Error("Visualização indisponível.");
+            astViewer = window.MiniParASTViewer.mount(host, ast);
+        } catch {
+            destroyASTViewer();
+            host.replaceChildren();
+            astSource = ast;
+            const notice = document.createElement("p");
+            notice.className = "ast-fallback";
+            notice.textContent = "Não foi possível abrir a árvore interativa. A estrutura completa do programa continua disponível abaixo.";
+            const json = document.createElement("pre");
+            json.id = "ast-code";
+            json.className = "structured-code";
+            json.textContent = JSON.stringify(ast, null, 2);
+            host.append(notice, json);
+        }
+    }
+
+    function renderPhase(phase, data) {
+        const view = phaseViews[phase];
+        resetPhase(phase, phasePrompts[phase], phase === "ast" && data.success);
+        view.feedback.classList.add(data.success ? "is-success" : "is-error");
+        view.feedback.textContent = data.success ? "Etapa concluída para o código atual."
+            : `A análise foi interrompida: ${phaseNames[data.failed_phase] || "falha em uma etapa anterior"}.`;
+        renderDiagnostics(phase, data.diagnostics || []);
+
+        if (phase === "tokens" && Array.isArray(data.result?.tokens)) {
+            renderTokens(view.content, data.result.tokens);
+            view.content.hidden = false;
+        } else if (data.success) {
+            if (phase === "ast") renderAST(data.result);
+            else if (phase === "semantic") view.content.textContent = data.result.message;
+            else view.content.textContent = data.result || "Nenhuma instrução foi gerada para este programa.";
+            view.content.hidden = false;
+        }
+    }
+
+    async function activateTab(tab, revealResult = false) {
+        showTab(tab, revealResult);
+        cancelAnalysis();
+        if (tab === executionTab) {
+            if (!controlsBusy()) status(executionStatus);
+            return;
+        }
+        if (tab === armTab) {
+            if (!controlsBusy()) status(executionStatus);
+            return;
+        }
+        const phase = tab.id.replace("tab-", "");
+        if (phaseCache.has(phase)) {
+            const cached = phaseCache.get(phase);
+            renderPhase(phase, cached);
+            if (!controlsBusy()) status(cached.success ? "Concluído" : "Erro");
+            return;
+        }
+        if (controlsBusy()) {
+            resetPhase(phase, loadingExample ? "Aguarde o carregamento do programa para analisar esta etapa."
+                : "Aguarde a conclusão da execução para analisar esta etapa.");
+            return;
+        }
+        const request = {
+            id: ++analysisSequence, phase, revision: sourceRevision,
+            code: getCode(), controller: new AbortController()
+        };
+        activeAnalysis = request;
+        const view = phaseViews[phase];
+        resetPhase(phase, loadingMessages[phase]);
+        view.panel.setAttribute("aria-busy", "true");
+        status("Analisando");
+        const isCurrent = () => activeAnalysis === request && request.id === analysisSequence
+            && request.revision === sourceRevision && request.code === getCode() && !controlsBusy();
+        try {
+            const data = await post("/api/analyze", { code: request.code, phase }, request.controller.signal);
+            if (!isCurrent()) return;
+            phaseCache.set(phase, data);
+            renderPhase(phase, data);
+            status(data.success ? "Concluído" : "Erro");
+        } catch (error) {
+            if (error.name === "AbortError" || !isCurrent()) return;
+            resetPhase(phase, error.message);
+            view.feedback.classList.add("is-error");
+            status("Erro");
+        } finally {
+            if (activeAnalysis === request) {
+                activeAnalysis = null;
+                view.panel.removeAttribute("aria-busy");
+            }
+        }
+    }
+
+    function cacheGeneratedPhase(phase, value) {
+        if (typeof value !== "string" || !value.length) return;
+        const data = { success: true, phase, failed_phase: null, result: value, diagnostics: [] };
+        phaseCache.set(phase, data);
+        renderPhase(phase, data);
+    }
+
+    connectSessionMonitor(terminalOutput, label => {
+        monitoring = label === "Monitorando";
+        cancelAnalysis();
+        status(label, true);
+        syncControls();
+        showTab(executionTab);
+    });
+    fetch("/api/tests").then(res => res.json()).then(data => {
+        for (const filename of data.tests) examples.add(new Option(filename, filename));
+        test11File = data.tests.find(name => /^teste_?11/i.test(name)) || null;
+        if (test11File) byId("arm-open-help").textContent = `Carrega ${test11File} no editor. Depois, execute.`;
+        syncControls();
+    }).catch(showError);
+
+    examples.onchange = async () => {
+        const filename = examples.value;
+        if (!filename || controlsBusy()) return;
+        loadingExample = true;
+        clearExecutable();
+        programInputs.value = "";
+        byId("execution-inputs").open = false;
+        sourceRevision++;
+        resetResults("Carregando programa…");
+        syncControls();
+        if (!monitoring) status("Carregando", true);
+        try {
+            const [program, metadata] = await Promise.all([
+                post("/api/get_test", { filename }), post("/api/test_spec", { filename })
+            ]);
+            if (monitoring) return;
+            setCode(program.code);
+            spec = metadata;
+            if (metadata.requires_input) {
+                byId("execution-inputs").open = true;
+                const descriptions = (metadata.inputs || []).map((item, index) =>
+                    `${index + 1}. ${item.descricao || item.prompt || "Entrada"}`);
+                setInputMode("reads", "Preencha antes de executar, na ordem: " + descriptions.join("; "));
+            } else {
+                setInputMode("none", "Este programa não usa input(). Os valores dele estão definidos no código.");
+            }
+            file.textContent = filename;
+            resetResults("Programa carregado. Pronto para executar.");
+            status("Pronto", true);
+        } catch (error) { showError(error); }
+        finally {
+            loadingExample = false;
+            syncControls();
+        }
+    };
+
+    openTest11.onclick = () => {
+        if (!test11File || controlsBusy()) return;
+        examples.value = test11File;
+        examples.onchange();
+    };
 
     async function handleMultiComputer(spec, filename) {
         if (!spec || !spec.multi_computer || !spec.multi_computer.required) return true;
@@ -289,82 +524,139 @@ document.addEventListener("DOMContentLoaded", () => {
         return true;
     }
 
-    function setCompiling(state) {
-        btnRun.disabled = state;
-        btnRun.textContent = state ? "⏳ Compilando..." : "▶ Compile & Run";
-    }
-
-    async function runCompile(code, filename, inputs) {
-        setCompiling(true);
-        terminalOutput.textContent = "Rodando compilador...";
-        terminalOutput.classList.remove("error-text");
-
+    run.onclick = async () => {
+        if (controlsBusy()) return;
+        cancelAnalysis();
+        executionBusy = true;
+        syncControls();
+        const filename = file.textContent;
+        const code = getCode();
+        const revision = sourceRevision;
+        let streamPhase = "compiling";
+        let programOutput = "";
+        clearExecutable();
+        resetResults("Preparando execução…", true, false);
+        status("Preparando", true);
         try {
-            const res = await fetch("/api/compile", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ code, filename, inputs })
+            const inputText = programInputs.value.replaceAll("\r\n", "\n");
+            const inputs = inputText === "" ? [] : inputText.split("\n");
+            if (inputs.length) {
+                const checked = await post("/api/analyze", { code, phase: "tokens" });
+                if (revision !== sourceRevision || code !== getCode() || monitoring) return;
+                if (checked.success && !checked.result.tokens.some(token => token.type === "INPUT")) {
+                    const message = "O código atual não usa input(). Os valores digitados não seriam utilizados. Limpe o campo, escolha um exemplo com entrada ou adicione input() ao código.";
+                    setInputMode("unused", message);
+                    byId("execution-inputs").open = true;
+                    showError(new Error(message));
+                    return;
+                }
+            }
+            if (monitoring) return;
+            if (!await handleMultiComputer(spec, filename)) {
+                if (!monitoring) {
+                    status("Cancelado", true);
+                    terminalOutput.textContent = "Execução cancelada.";
+                }
+                return;
+            }
+            if (monitoring) return;
+            status("Compilando", true);
+            terminalOutput.textContent = "";
+            const response = await fetch("/api/execute", { method: "POST",
+                headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code, filename, inputs }) });
+            const data = await window.MiniParExecutionStream.consume(response, event => {
+                if (revision !== sourceRevision || code !== getCode() || monitoring) return;
+                if (event.type === "phase") {
+                    streamPhase = event.phase;
+                    status(event.phase === "executing" ? "Executando" : "Compilando", true);
+                    if (event.message) appendOutput(`\n${event.message}\n`);
+                } else if (event.type === "output") {
+                    if (streamPhase === "compiling") {
+                        compilerLog.hidden = false;
+                        compilerOutput.append(document.createTextNode(event.text));
+                    } else {
+                        if (event.stream !== "stderr") programOutput += event.text;
+                        appendOutput(event.text);
+                    }
+                } else if (event.type === "error") {
+                    if (streamPhase === "compiling") compilerLog.open = true;
+                    terminalOutput.classList.add("error-text");
+                    appendOutput(`\n${event.message || "Erro na execução."}\n`);
+                }
             });
-            const data = await res.json();
-
-            if (data.cpp) editorCpp.setValue(data.cpp);
-            if (data.tac) editorTac.setValue(data.tac);
-
-            setTimeout(() => { editorCpp.refresh(); editorTac.refresh(); }, 50);
-
-            if (data.success) {
-                terminalOutput.textContent = data.stdout || "Compilação concluída com sucesso!";
-                terminalOutput.classList.remove("error-text");
-            } else {
-                terminalOutput.textContent = data.stderr || data.error || "Erro na execução.";
+            if (revision !== sourceRevision || code !== getCode()) return;
+            cacheGeneratedPhase("cpp", data.cpp);
+            cacheGeneratedPhase("tac", data.tac);
+            if (!monitoring) {
+                showArm(programOutput, filename);
+                showExecutable(data);
+                terminalOutput.classList.toggle("error-text", !data.success);
+                appendOutput(data.success ? "\nExecução concluída.\n"
+                    : `\nExecução encerrada com erro${Number.isInteger(data.exit_code) ? ` (código ${data.exit_code})` : ""}.\n`);
+                status(data.success ? "Concluído" : "Erro", true);
+            }
+        } catch (error) {
+            if (!monitoring) {
+                status("Erro", true);
                 terminalOutput.classList.add("error-text");
-            }
-        } catch (err) {
-            terminalOutput.textContent = "Erro de conexão com o servidor Backend.";
-            terminalOutput.classList.add("error-text");
-        } finally {
-            setCompiling(false);
-        }
-    }
-
-    btnRun.onclick = async () => {
-        const code     = editorMinipar.getValue();
-        const filename = currentFileLabel.textContent;
-
-        if (!currentTestSpec) {
-            await loadTestSpec(filename);
-        }
-
-        const spec = currentTestSpec;
-
-        if (spec && spec.multi_computer && spec.multi_computer.required) {
-            const proceed = await handleMultiComputer(spec, filename);
-            if (!proceed) {
-                terminalOutput.textContent = "[INFO] Execução cancelada — aguardando participantes.";
-                return;
+                appendOutput(`\n${error.message}\n`);
             }
         }
-
-        let inputs = [];
-        if (spec && spec.requires_input) {
-            inputs = await collectInputs(spec);
-            if (inputs === null) {
-                terminalOutput.textContent = "[INFO] Execução cancelada — entrada não fornecida.";
-                return;
-            }
+        finally {
+            executionBusy = false;
+            syncControls();
         }
-
-        await runCompile(code, filename, inputs);
     };
 
-    btnClear.onclick = () => {
-        editorMinipar.setValue("");
-        editorCpp.setValue("");
-        editorTac.setValue("");
-        currentFileLabel.textContent = "ide_temp.minipar";
-        currentTestSpec = null;
-        document.querySelectorAll(".test-list li").forEach(li => li.classList.remove("active"));
-        terminalOutput.textContent = "Workspace limpo. Pode começar a digitar.";
-        terminalOutput.classList.remove("error-text");
+    download.onclick = async () => {
+        if (controlsBusy()) return;
+        cancelAnalysis();
+        executionBusy = true;
+        syncControls();
+        clearExecutable();
+        const code = getCode();
+        const revision = sourceRevision;
+        resetResults("Compilando o programa para download…", true, false);
+        status("Compilando", true);
+        try {
+            const data = await post("/api/build", { code, filename: file.textContent });
+            if (revision !== sourceRevision || code !== getCode() || monitoring) return;
+            cacheGeneratedPhase("cpp", data.cpp);
+            cacheGeneratedPhase("tac", data.tac);
+            compilerOutput.textContent = [data.stdout, data.stderr].filter(Boolean).join("\n");
+            compilerLog.hidden = !compilerOutput.textContent;
+            terminalOutput.textContent = "";
+            if (!data.success || !data.download_url) {
+                compilerLog.open = true;
+                terminalOutput.classList.add("error-text");
+                appendOutput("\nNão foi possível gerar o executável.\n");
+                status("Erro", true);
+                return;
+            }
+            showExecutable(data, true);
+            appendOutput("\nExecutável gerado. O download foi solicitado; o link acima permite baixar novamente.\n");
+            status("Compilado", true);
+        } catch (error) { showError(error); }
+        finally {
+            executionBusy = false;
+            syncControls();
+        }
+    };
+
+    clear.onclick = () => {
+        if (controlsBusy()) return;
+        sourceRevision++;
+        setCode("");
+        spec = null;
+        clearExecutable();
+        programInputs.value = "";
+        byId("execution-inputs").open = false;
+        setInputMode("none", "Adicione input() ao código para receber valores do teclado.");
+        examples.value = "";
+        file.textContent = "ide_temp.minipar";
+        resetResults("Execute o programa para ver a saída.");
+        status("Pronto", true);
+        if (editor?.focus) editor.focus();
+        else source.focus();
     };
 });

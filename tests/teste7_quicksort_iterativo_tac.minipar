@@ -1,14 +1,14 @@
+# Entrada: uma linha com os numeros do vetor, separados por espaco.
 func quicksort_iterativo(arr) {
-    var stack = [0, 4];
-    var sp = 2;
-    while (sp > 0) {
-        sp = sp - 1;
-        var fim = stack[sp];
-        sp = sp - 1;
-        var inicio = stack[sp];
-        if (inicio >= fim) {
-            continue;
-        }
+    var stack = [];
+    if (len(arr) > 1) {
+        stack.append(0);
+        stack.append(len(arr) - 1);
+    }
+    while (len(stack) > 0) {
+        var fim = stack.pop();
+        var inicio = stack.pop();
+        if (inicio >= fim) { continue; }
         var pivot = arr[fim];
         var i = inicio - 1;
         var j = inicio;
@@ -25,20 +25,17 @@ func quicksort_iterativo(arr) {
         var tmp2 = arr[i];
         arr[i] = arr[fim];
         arr[fim] = tmp2;
-        stack[sp] = inicio;
-        sp = sp + 1;
-        stack[sp] = i - 1;
-        sp = sp + 1;
-        stack[sp] = i + 1;
-        sp = sp + 1;
-        stack[sp] = fim;
-        sp = sp + 1;
+        stack.append(inicio);
+        stack.append(i - 1);
+        stack.append(i + 1);
+        stack.append(fim);
     }
     return arr;
 }
 
 seq {
-    var array = [33, 12, 98, 5, 61];
+    var array = parse_ints(input("Numeros para ordenar, separados por espaco: "));
+    print("Vetor original:", array);
     var ordenado = quicksort_iterativo(array);
     print("Array ordenado:", ordenado);
 }

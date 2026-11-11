@@ -36,9 +36,8 @@ class Quicksort {
     }
 
     func ordenar() {
-        var n = len(this.array) - 1;
-        if (n >= 0) {
-            this.quicksort(0, n);
+        if (len(this.array) > 1) {
+            this.quicksort(0, len(this.array) - 1);
         }
         return this.array;
     }

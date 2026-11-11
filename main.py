@@ -1,5 +1,7 @@
 import sys
 import os
+import argparse
+from run_artifacts import create_run_dir
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(BASE_DIR, 'src'))
@@ -10,9 +12,12 @@ from semantic import SemanticAnalyzer
 from tac import TACGenerator
 from codegen import CppCodeGenerator
 
-def compile_file(source_path: str, output_name: str) -> bool:
+def compile_file(source_path: str, output_name: str, output_dir: str = None) -> bool:
     """Processa as 3 Fases do Compilador em um arquivo alvo."""
     print(f"\n=== Compilando: {source_path} ===")
+    output_dir = output_dir or create_run_dir()
+    output_name = os.path.basename(output_name)
+    print(f"[OUTPUT] {os.path.abspath(output_dir)}")
     try:
         with open(source_path, encoding="utf-8") as f:
             source_code = f.read()
@@ -23,6 +28,13 @@ def compile_file(source_path: str, output_name: str) -> bool:
     print("[Fase 1] Analise Lexica e Sintatica...")
     lexer  = Lexer(source_code)
     tokens = lexer.tokenize()
+
+    # Para a compilacao se o lexer achou erros (caractere invalido, texto sem fechar...).
+    if lexer.has_errors:
+        for error in lexer.errors:
+            print(error, file=sys.stderr)
+        print("[ERRO] Falha na Analise Lexica. Compilacao abortada.", file=sys.stderr)
+        return False
 
     parser  = Parser(tokens)
     program = parser.parse()
@@ -35,12 +47,12 @@ def compile_file(source_path: str, output_name: str) -> bool:
 
     print("[Fase 3] Geracao de Codigo Intermediario (TAC - 3 enderecos)...")
     tac = TACGenerator()
-    tac_path = tac.generate(program, output_name)
+    tac_path = tac.generate(program, output_name, output_dir)
     print(f"[TAC] Arquivo gerado: {tac_path}")
 
     print("[Fase 4] Transpilacao e Chamada do GCC (-O3)...")
     codegen = CppCodeGenerator()
-    return codegen.generate(program, output_name)
+    return codegen.generate(program, output_name, output_dir)
 
 
 def start_interactive():
@@ -53,7 +65,6 @@ def start_interactive():
         _load_session,
     )
 
-    # Segundo terminal detectou sessão ativa — entra como participante antes do menu
     action, session = check_active_session_for_new_terminal()
     if action == "join" and session:
         join_session(session)
@@ -101,23 +112,25 @@ def start_interactive():
 
 
 def main() -> int:
-    # Se rodar sem argumentos (ex: `python main.py`), inicia a interface de escolha
     if len(sys.argv) < 2:
         start_interactive()
         return 0
 
-    # Caso o script seja chamado via subprocesso pela IDE (passando arquivo como argumento)
-    source_path  = sys.argv[1]
+    arguments = argparse.ArgumentParser(description="MiniPar compiler")
+    arguments.add_argument("source_path")
+    arguments.add_argument("output_name", nargs="?")
+    arguments.add_argument("--output-dir", help="Explicit artifact directory (default: a private run directory)")
+    args = arguments.parse_args()
+    source_path = args.source_path
     
-    # Se não passarem o nome da saída manualmente, extraímos do nome do próprio arquivo Minipar
-    if len(sys.argv) > 2:
-        output_name = sys.argv[2]
+    if args.output_name:
+        output_name = args.output_name
     else:
         base_file = os.path.basename(source_path)
         output_name = base_file.replace('.minipar', '')
 
     print("=== Compilador MiniPar ===")
-    success = compile_file(source_path, output_name)
+    success = compile_file(source_path, output_name, args.output_dir)
     
     if success:
         print("=== Processo Finalizado ===")

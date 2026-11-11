@@ -4,9 +4,12 @@ Requisitos de cada programa são detectados automaticamente via program_analyzer
 """
 from __future__ import annotations
 
+import hashlib
 import json
+import tempfile
 import os
 import socket
+import shutil
 import sys
 import time
 from datetime import datetime
@@ -42,19 +45,52 @@ def get_test_spec(filename: str) -> Optional[dict[str, Any]]:
 
 
 def _load_session() -> Optional[dict[str, Any]]:
-    if not os.path.exists(SESSION_FILE):
-        return None
+    return _read_snapshot(SESSION_FILE)
+
+
+def _completion_path(created_at: str) -> str:
+    key = hashlib.sha256(created_at.encode("utf-8")).hexdigest()
+    return os.path.join(os.path.dirname(SESSION_FILE), "session_results", key + ".json")
+
+
+def load_completed_session(created_at: str) -> Optional[dict]:
+    return _read_snapshot(_completion_path(created_at))
+
+
+def _read_snapshot(path: str) -> Optional[dict]:
     try:
-        with open(SESSION_FILE, encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             return json.load(f)
     except (json.JSONDecodeError, OSError):
         return None
 
 
+def _write_snapshot(path: str, session: dict) -> None:
+    # Publish a complete JSON document so polling cannot see a partial write.
+    directory = os.path.dirname(path)
+    os.makedirs(directory, exist_ok=True)
+    with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=directory, delete=False) as f:
+        temporary_path = f.name
+    try:
+        with open(temporary_path, "w", encoding="utf-8") as f:
+            json.dump(session, f, indent=2, ensure_ascii=False)
+        # Windows readers can briefly prevent replacement of an open file.
+        # Keep publication atomic and retry only those transient sharing errors.
+        for attempt in range(10):
+            try:
+                os.replace(temporary_path, path)
+                break
+            except OSError as error:
+                if getattr(error, "winerror", None) not in (5, 32, 33) or attempt == 9:
+                    raise
+                time.sleep(0.01 * (attempt + 1))
+    finally:
+        if os.path.exists(temporary_path):
+            os.remove(temporary_path)
+
+
 def _save_session(session: dict[str, Any]) -> None:
-    os.makedirs(os.path.dirname(SESSION_FILE), exist_ok=True)
-    with open(SESSION_FILE, "w", encoding="utf-8") as f:
-        json.dump(session, f, indent=2, ensure_ascii=False)
+    _write_snapshot(SESSION_FILE, session)
 
 
 def clear_session() -> None:
@@ -154,15 +190,21 @@ def run_joiner_progress_monitor(session: dict[str, Any]) -> bool:
     spinner_idx = 0
     start_time = time.time()
     last_phase = ""
+    session_id = session.get("created_at")
+    last_progress = None
 
     _print_joiner_header(session, my_role)
-    append_session_log(f"Terminal conectado: {my_role} ({terminal_id})", source="system")
+    initial = _load_session()
+    if session_id and initial and initial.get("created_at") == session_id:
+        append_session_log(f"Terminal conectado: {my_role} ({terminal_id})", source="system")
 
     while True:
         current = _load_session()
-        if current is None:
-            print("\n\n  [INFO] Sessão encerrada.")
-            return True
+        if current is None or current.get("created_at") != session_id:
+            current = load_completed_session(session_id) if session_id else None
+            if current is None:
+                print("\n\n  [INFO] A sessão acompanhada foi encerrada.")
+                return True
 
         log = current.get("progress_log", [])
         # Imprime apenas entradas novas desde a última iteração
@@ -189,15 +231,23 @@ def run_joiner_progress_monitor(session: dict[str, Any]) -> bool:
             filled = int(percent / 5)
             bar = f" [{'█' * filled}{'░' * (20 - filled)}] {percent}%"
 
-        sys.stdout.write(f"\r  {spinner} [{elapsed:>3}s]{bar} {activity}          ")
-        sys.stdout.flush()
+        if sys.stdout.isatty():
+            # Keep the spinner on one physical line, including narrow terminals.
+            width = max(1, shutil.get_terminal_size(fallback=(80, 24)).columns - 1)
+            progress = f"  {spinner} [{elapsed:>3}s]{bar} {activity}"
+            sys.stdout.write("\r" + progress[:width].ljust(width))
+            sys.stdout.flush()
+        elif (phase, percent) != last_progress:
+            # Captured logs do not interpret carriage returns; avoid flooding them.
+            print(f"  Progresso: {percent if percent is not None else '?'}% — {activity}")
+        last_progress = (phase, percent)
 
         if status == "completed":
             print("\n")
             _print_joiner_summary(current, my_role)
             return True
         if status == "cancelled":
-            print("\n\n  [INFO] Execução cancelada pelo iniciador.")
+            print(f"\n\n  [INFO] {phase_msg if phase == 'cancelled' else 'Execução cancelada.'}")
             return False
         time.sleep(0.4)
 
@@ -377,22 +427,31 @@ def _announce_input_requirement(spec: dict[str, Any]) -> None:
     print()
 
 
-def check_active_session_for_new_terminal() -> tuple[Optional[str], Optional[dict]]:
+def inspect_active_session() -> tuple[bool, Optional[dict]]:
+    """Read session state without prompting; safe for HTTP requests and polling."""
     session = _load_session()
     if session is None or session.get("status") in ("completed", "cancelled"):
-        return None, session
+        return False, session
 
     if session.get("status") == "running":
-        return prompt_new_user_on_active_session(session), session
+        return True, session
 
     if session.get("status") in ("waiting", "ready"):
         terminal_id = get_terminal_id()
         participants = session.get("participants", [])
         if any(p["terminal_id"] == terminal_id for p in participants):
-            return None, session
+            return False, session
         if len(participants) < session.get("required_participants", 0):
-            return prompt_new_user_on_active_session(session), session
+            return True, session
 
+    return False, session
+
+
+def check_active_session_for_new_terminal() -> tuple[Optional[str], Optional[dict]]:
+    """Terminal-only wrapper: ask the user when inspection requires a choice."""
+    needs_choice, session = inspect_active_session()
+    if needs_choice:
+        return prompt_new_user_on_active_session(session), session
     return None, session
 
 
@@ -483,9 +542,13 @@ def finalize_test_execution(test_path: str, output: str = "") -> None:
             "message": "Execução finalizada pelo terminal iniciador.",
             "source": "initiator",
         })
+        if session.get("created_at"):
+            _write_snapshot(_completion_path(session["created_at"]), session)
         _save_session(session)
         time.sleep(2)  # tempo para terminais participantes lerem status "completed"
-        clear_session()
+        current = _load_session()
+        if current and current.get("created_at") == session.get("created_at") and current.get("status") == "completed":
+            clear_session()
 
 
 def get_spec_summary(filename: str) -> Optional[dict[str, Any]]:

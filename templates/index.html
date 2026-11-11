@@ -1,62 +1,135 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="pt-BR">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Minipar IDE</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/theme/dracula.min.css">
-    <link rel="stylesheet" href="/static/css/style.css">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MiniPar · Laboratório de compilação</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/theme/dracula.min.css">
+<link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
-    <div class="app-container">
-        <aside class="sidebar">
-            <div class="sidebar-header">
-                <h2>Explorer</h2>
-            </div>
-            <ul id="test-list" class="test-list"></ul>
-        </aside>
-
-        <main class="main-content">
-            <header class="topbar">
-                <div class="file-info">
-                    <span id="current-file">ide_temp.minipar</span>
-                </div>
-                <div class="actions">
-                    <button id="btn-run" class="btn primary">▶ Compile &amp; Run</button>
-                    <button id="btn-clear" class="btn secondary">Clear</button>
-                </div>
-            </header>
-
-            <div class="editor-workspace">
-                <div class="editor-pane pane-left">
-                    <div class="pane-header">Source (Minipar)</div>
-                    <textarea id="editor-minipar"></textarea>
-                </div>
-
-                <div class="editor-pane pane-right">
-                    <div class="pane-tabs">
-                        <button class="tab active" data-target="out-cpp">C++ Output</button>
-                        <button class="tab" data-target="out-tac">TAC Output</button>
-                    </div>
-                    <div class="tab-content active" id="out-cpp">
-                        <textarea id="editor-cpp"></textarea>
-                    </div>
-                    <div class="tab-content" id="out-tac">
-                        <textarea id="editor-tac"></textarea>
-                    </div>
-                </div>
-            </div>
-
-            <footer class="terminal">
-                <div class="terminal-header">Terminal Output</div>
-                <pre id="terminal-output">Ready...</pre>
-            </footer>
-        </main>
+<header class="mast">
+  <div class="frame brand">
+    <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M3 25V8l7 9 6-9v17m5-1V8h4a5 5 0 0 1 0 10h-4"/></svg>
+    <b>MiniPar</b>
+    <a class="legacy-link" href="/legacy">Interface anterior <span aria-hidden="true">↗</span></a>
+  </div>
+</header>
+<main class="frame">
+  <div class="toolbar"><h1>Área de trabalho</h1><div class="actions">
+    <label for="examples">Exemplos</label><select id="examples"><option value="">Escolher programa</option></select>
+  </div></div>
+  <section class="compiler-tools" aria-labelledby="stages-title">
+    <div class="compiler-head">
+      <div class="stages-intro">
+        <h2 id="stages-title">Etapas da compilação</h2>
+        <p>Selecione uma etapa para analisar o código atual, sem executar o programa.</p>
+      </div>
+      <div class="compile-actions">
+        <div class="action-group">
+          <button class="download" id="btn-download" type="button" aria-describedby="download-help">Compilar e baixar</button>
+          <p class="action-help" id="download-help">Gera o executável sem executar o programa.</p>
+        </div>
+        <div class="action-group">
+          <button class="run" id="btn-run" type="button" aria-describedby="run-help"><span aria-hidden="true">▶</span> Executar</button>
+          <p class="action-help" id="run-help">Compila e mostra a saída durante a execução.</p>
+        </div>
+      </div>
     </div>
+    <div class="tabs stage-tabs" role="tablist" aria-label="Etapas e resultados da compilação">
+      <button id="tab-tokens" type="button" role="tab" aria-selected="false" aria-controls="out-tokens" tabindex="-1"><span class="stage-number" aria-hidden="true">1</span>Tokens</button>
+      <button id="tab-ast" type="button" role="tab" aria-selected="false" aria-controls="out-ast" tabindex="-1"><span class="stage-number" aria-hidden="true">2</span>AST</button>
+      <button id="tab-semantic" type="button" role="tab" aria-selected="false" aria-controls="out-semantic" tabindex="-1"><span class="stage-number" aria-hidden="true">3</span>Semântica</button>
+      <button id="tab-tac" type="button" role="tab" aria-selected="false" aria-controls="out-tac" tabindex="-1"><span class="stage-number" aria-hidden="true">4</span>TAC</button>
+      <button id="tab-cpp" type="button" role="tab" aria-selected="false" aria-controls="out-cpp" tabindex="-1"><span class="stage-number" aria-hidden="true">5</span>Código C++</button>
+      <button id="tab-exec" class="execution-tab" type="button" role="tab" aria-selected="true" aria-controls="out-exec"><span aria-hidden="true">▶</span>Execução</button>
+      <button id="tab-arm" class="arm-tab" type="button" role="tab" aria-selected="false" aria-controls="out-arm" tabindex="-1"><span class="arm-dot" aria-hidden="true"></span>ARMv7</button>
+    </div>
+  </section>
+  <div class="workspace">
+    <section class="panel source"><div class="panel-title"><h2><span aria-hidden="true">❮❯</span> Código-fonte</h2><button id="btn-clear" type="button">Novo arquivo</button></div>
+      <div class="filebar"><i></i><span id="current-file">ide_temp.minipar</span></div>
+      <div class="editing"><textarea spellcheck="false" aria-label="Código MiniPar" id="editor-minipar"># Soma dos números de 1 até o limite informado
+seq {
+    var limite = to_number(input("Somar de 1 ate qual numero? "));
+    var numero = 1;
+    var soma = 0;
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/clike/clike.min.js"></script>
-    <script src="/static/js/script.js"></script>
-</body>
-</html>
+    while (numero &lt;= limite) {
+        soma = soma + numero;
+        numero = numero + 1;
+    }
+
+    print("Soma:", soma);
+}</textarea></div>
+      <div class="foot"><span>MiniPar</span><span>UTF-8</span></div>
+    </section>
+    <section class="panel results"><div class="panel-title"><h2><span aria-hidden="true">▤</span> Resultados</h2><span id="status" role="status">Pronto</span></div>
+      <div class="output" id="out-tokens" role="tabpanel" aria-labelledby="tab-tokens" tabindex="0" hidden>
+        <div class="phase-explainer"><span class="phase-label">Etapa 1 · Análise léxica</span><h3>Tokens</h3><p>O código é dividido em palavras-chave, nomes, números e símbolos. Cada parte reconhecida é um token.</p></div>
+        <p class="phase-feedback" id="tokens-feedback" role="status">Selecione Tokens para analisar o código atual.</p>
+        <div id="tokens-diagnostics" hidden></div>
+        <div class="phase-result" id="tokens-result" hidden></div>
+      </div>
+      <div class="output" id="out-ast" role="tabpanel" aria-labelledby="tab-ast" tabindex="0" hidden>
+        <div class="phase-explainer"><span class="phase-label">Etapa 2 · Análise sintática</span><h3>Árvore sintática abstrata</h3><p>A AST organiza os comandos e expressões em uma árvore que representa a estrutura do programa.</p></div>
+        <p class="phase-feedback" id="ast-feedback" role="status">Selecione AST para analisar a estrutura do código atual.</p>
+        <div id="ast-diagnostics" hidden></div>
+        <div class="phase-result" id="ast-result" hidden></div>
+      </div>
+      <div class="output" id="out-semantic" role="tabpanel" aria-labelledby="tab-semantic" tabindex="0" hidden>
+        <div class="phase-explainer"><span class="phase-label">Etapa 3 · Análise semântica</span><h3>Semântica</h3><p>Esta etapa verifica o uso de variáveis, os tipos e os escopos para identificar operações que não fazem sentido no programa.</p></div>
+        <p class="phase-feedback" id="semantic-feedback" role="status">Selecione Semântica para verificar o código atual.</p>
+        <div id="semantic-diagnostics" hidden></div>
+        <p class="phase-result semantic-result" id="semantic-result" hidden></p>
+      </div>
+      <div class="output" id="out-tac" role="tabpanel" aria-labelledby="tab-tac" tabindex="0" hidden>
+        <div class="phase-explainer"><span class="phase-label">Etapa 4 · Código intermediário</span><h3>TAC</h3><p>O código de três endereços divide o programa em instruções mais simples, antes da geração do código final.</p></div>
+        <p class="phase-feedback" id="tac-feedback" role="status">Selecione TAC para gerar o código intermediário.</p>
+        <div id="tac-diagnostics" hidden></div>
+        <pre class="phase-result" id="tac-code" hidden></pre>
+      </div>
+      <div class="output" id="out-cpp" role="tabpanel" aria-labelledby="tab-cpp" tabindex="0" hidden>
+        <div class="phase-explainer"><span class="phase-label">Etapa 5 · Geração de código</span><h3>Código C++</h3><p>O programa MiniPar é traduzido para C++. Esse código é compilado para produzir o executável.</p></div>
+        <p class="phase-feedback" id="cpp-feedback" role="status">Selecione Código C++ para gerar a tradução do programa.</p>
+        <div id="cpp-diagnostics" hidden></div>
+        <pre class="phase-result" id="cpp-code" hidden></pre>
+      </div>
+      <div class="output" id="out-exec" role="tabpanel" aria-labelledby="tab-exec" tabindex="0">
+        <div class="phase-explainer execution-intro"><span class="phase-label">Resultado do programa</span><h3>Execução</h3><p>Acompanhe as mensagens da compilação e a saída do seu programa em tempo real.</p></div>
+        <details class="execution-inputs" id="execution-inputs" open>
+          <summary>Entradas do programa</summary>
+          <label for="program-inputs">Valores para input(), uma linha por leitura</label>
+          <p id="inputs-help">Informe o limite da soma antes de executar, por exemplo: 5.</p>
+          <textarea id="program-inputs" rows="3" spellcheck="false" aria-describedby="inputs-help" placeholder="Exemplo:&#10;5"></textarea>
+        </details>
+        <a class="executable-link" id="executable-link" hidden download>Baixar executável</a>
+        <details class="execution-log" id="compiler-log" hidden>
+          <summary>Mensagens da compilação</summary>
+          <pre id="compiler-output"></pre>
+        </details>
+        <pre id="terminal-output">Execute o programa para ver a saída.</pre>
+      </div>
+      <div class="output" id="out-arm" role="tabpanel" aria-labelledby="tab-arm" tabindex="0" hidden>
+        <div class="phase-explainer"><span class="phase-label">Teste 11 · Assembly ARMv7</span><h3>Código ARMv7</h3><p>O Teste 11 é um minicompilador escrito em MiniPar. Ao ser executado, ele imprime um programa em Assembly ARMv7 entre as linhas <code>=== INICIO ARM ===</code> e <code>=== FIM ARM ===</code>. Esse trecho aparece aqui e pode ser baixado como arquivo .arm para rodar no CPUlator.</p></div>
+        <div class="arm-actions">
+          <button class="arm-open" id="btn-open-t11" type="button" disabled aria-describedby="arm-open-help">Abrir Teste 11</button>
+          <p class="action-help" id="arm-open-help">O Teste 11 ainda não está na lista de exemplos.</p>
+        </div>
+        <p class="phase-feedback" id="arm-feedback" role="status">Execute um programa que imprima o Assembly entre as marcas para ver o código aqui.</p>
+        <a class="arm-download" id="arm-download" hidden>Baixar .arm</a>
+        <pre class="phase-result arm-code" id="arm-code" hidden></pre>
+      </div>
+    </section>
+  </div>
+</main>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/clike/clike.min.js"></script>
+<script src="/static/vendor/d3-7.9.0.min.js"></script>
+<script src="/static/js/ast-tree-model.js"></script>
+<script src="/static/js/ast-viewer.js"></script>
+<script src="/static/js/session-monitor.js"></script>
+<script src="/static/js/execution-stream.js"></script>
+<script src="/static/js/arm-extract.js"></script>
+<script src="/static/js/script.js"></script>
+</body></html>
