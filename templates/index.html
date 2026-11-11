@@ -43,6 +43,7 @@
       <button id="tab-tac" type="button" role="tab" aria-selected="false" aria-controls="out-tac" tabindex="-1"><span class="stage-number" aria-hidden="true">4</span>TAC</button>
       <button id="tab-cpp" type="button" role="tab" aria-selected="false" aria-controls="out-cpp" tabindex="-1"><span class="stage-number" aria-hidden="true">5</span>Código C++</button>
       <button id="tab-exec" class="execution-tab" type="button" role="tab" aria-selected="true" aria-controls="out-exec"><span aria-hidden="true">▶</span>Execução</button>
+      <button id="tab-arm" class="arm-tab" type="button" role="tab" aria-selected="false" aria-controls="out-arm" tabindex="-1"><span class="arm-dot" aria-hidden="true"></span>ARMv7</button>
     </div>
   </section>
   <div class="workspace">
@@ -109,6 +110,16 @@ seq {
         </details>
         <pre id="terminal-output">Execute o programa para ver a saída.</pre>
       </div>
+      <div class="output" id="out-arm" role="tabpanel" aria-labelledby="tab-arm" tabindex="0" hidden>
+        <div class="phase-explainer"><span class="phase-label">Teste 11 · Assembly ARMv7</span><h3>Código ARMv7</h3><p>O Teste 11 é um minicompilador escrito em MiniPar. Ao ser executado, ele imprime um programa em Assembly ARMv7 entre as linhas <code>=== INICIO ARM ===</code> e <code>=== FIM ARM ===</code>. Esse trecho aparece aqui e pode ser baixado como arquivo .arm para rodar no CPUlator.</p></div>
+        <div class="arm-actions">
+          <button class="arm-open" id="btn-open-t11" type="button" disabled aria-describedby="arm-open-help">Abrir Teste 11</button>
+          <p class="action-help" id="arm-open-help">O Teste 11 ainda não está na lista de exemplos.</p>
+        </div>
+        <p class="phase-feedback" id="arm-feedback" role="status">Execute um programa que imprima o Assembly entre as marcas para ver o código aqui.</p>
+        <a class="arm-download" id="arm-download" hidden>Baixar .arm</a>
+        <pre class="phase-result arm-code" id="arm-code" hidden></pre>
+      </div>
     </section>
   </div>
 </main>
@@ -119,5 +130,6 @@ seq {
 <script src="/static/js/ast-viewer.js"></script>
 <script src="/static/js/session-monitor.js"></script>
 <script src="/static/js/execution-stream.js"></script>
+<script src="/static/js/arm-extract.js"></script>
 <script src="/static/js/script.js"></script>
 </body></html>
