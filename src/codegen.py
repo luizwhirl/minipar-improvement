@@ -326,7 +326,10 @@ class CppCodeGenerator:
         with open(cpp_path, "w", encoding="utf-8") as f: f.write(cpp_code)
         
         print("[CODEGEN] Compilando via g++ com -std=c++20 e -O3...")
-        result = subprocess.run(["g++", "-std=c++20", "-O3", cpp_path, "-o", exe_path, "-pthread", "-lws2_32"])
+        command = ["g++", "-std=c++20", "-O3", cpp_path, "-o", exe_path, "-pthread"]
+        if sys.platform == "win32":
+            command.append("-lws2_32")  # biblioteca de sockets do Windows (Winsock)
+        result = subprocess.run(command)
         if result.returncode == 0:
             print(f"[SUCESSO] Executavel: {exe_path}")
             return True
