@@ -23,6 +23,17 @@ document.addEventListener("DOMContentLoaded", () => {
     const clear = byId("btn-clear");
     const tabs = Array.from(document.querySelectorAll('[role="tab"]'));
     const executionTab = byId("tab-exec");
+    const armTab = byId("tab-arm");
+    const armFeedback = byId("arm-feedback");
+    const armCode = byId("arm-code");
+    const armDownload = byId("arm-download");
+    const openTest11 = byId("btn-open-t11");
+    const armMessages = {
+        waiting: "Execute um programa que imprima o Assembly entre as marcas para ver o código aqui.",
+        missing: "A última execução não imprimiu Assembly ARM entre as linhas === INICIO ARM === e === FIM ARM ===.",
+        unclosed: "A saída tem a linha === INICIO ARM ===, mas falta a linha === FIM ARM ===. Confira se o programa terminou.",
+        repeated: "A saída tem mais de um bloco de Assembly ARM. Deixe só um bloco para poder baixar o arquivo."
+    };
     const results = document.querySelector(".results");
     const phases = ["tokens", "ast", "semantic", "tac", "cpp"];
     const phaseNames = {
@@ -57,6 +68,8 @@ document.addEventListener("DOMContentLoaded", () => {
     let astViewer = null;
     let astSource = null;
     let inputMode = "reads";
+    let test11File = null;
+    let armUrl = null;
 
     const controlsBusy = () => executionBusy || monitoring || loadingExample;
 
@@ -92,6 +105,7 @@ document.addEventListener("DOMContentLoaded", () => {
     function syncControls() {
         const value = controlsBusy();
         run.disabled = download.disabled = clear.disabled = examples.disabled = value;
+        openTest11.disabled = value || !test11File;
         programInputs.disabled = value || inputMode === "none";
         source.readOnly = value;
         editor?.setOption?.("readOnly", value);
@@ -153,6 +167,43 @@ document.addEventListener("DOMContentLoaded", () => {
         compilerLog.hidden = true;
         compilerLog.open = false;
         compilerOutput.textContent = "";
+        resetArm();
+    }
+
+    function resetArm(message = armMessages.waiting) {
+        if (armUrl) URL.revokeObjectURL(armUrl);
+        armUrl = null;
+        armDownload.hidden = true;
+        armDownload.removeAttribute("href");
+        armDownload.removeAttribute("download");
+        armCode.textContent = "";
+        armCode.hidden = true;
+        armFeedback.className = "phase-feedback";
+        armFeedback.textContent = message;
+        armTab.classList.remove("has-arm");
+    }
+
+    // Procura o Assembly na saída do programa e libera o download do .arm.
+    function showArm(output, filename) {
+        const found = window.MiniParArmExtract.extract(output);
+        if (found.status !== "found") {
+            resetArm(armMessages[found.status]);
+            if (found.status !== "missing") armFeedback.classList.add("is-error");
+            return;
+        }
+        resetArm();
+        const name = window.MiniParArmExtract.armFilename(filename);
+        armUrl = URL.createObjectURL(new Blob([found.code], { type: "text/plain;charset=utf-8" }));
+        armDownload.href = armUrl;
+        armDownload.download = name;
+        armDownload.textContent = `Baixar ${name}`;
+        armDownload.hidden = false;
+        armCode.textContent = found.code;
+        armCode.hidden = false;
+        armFeedback.classList.add("is-success");
+        const lines = found.code.split("\n").length - 1;
+        armFeedback.textContent = `Assembly ARMv7 encontrado na última execução (${lines} ${lines === 1 ? "linha" : "linhas"}).`;
+        armTab.classList.add("has-arm");
     }
 
     function clearExecutable() {
@@ -317,6 +368,10 @@ document.addEventListener("DOMContentLoaded", () => {
             if (!controlsBusy()) status(executionStatus);
             return;
         }
+        if (tab === armTab) {
+            if (!controlsBusy()) status(executionStatus);
+            return;
+        }
         const phase = tab.id.replace("tab-", "");
         if (phaseCache.has(phase)) {
             const cached = phaseCache.get(phase);
@@ -375,6 +430,8 @@ document.addEventListener("DOMContentLoaded", () => {
     });
     fetch("/api/tests").then(res => res.json()).then(data => {
         for (const filename of data.tests) examples.add(new Option(filename, filename));
+        test11File = data.tests.find(name => /^teste_?11/i.test(name)) || null;
+        if (test11File) byId("arm-open-help").textContent = `Carrega ${test11File} no editor. Depois, execute.`;
         syncControls();
     }).catch(showError);
 
@@ -412,6 +469,12 @@ document.addEventListener("DOMContentLoaded", () => {
             loadingExample = false;
             syncControls();
         }
+    };
+
+    openTest11.onclick = () => {
+        if (!test11File || controlsBusy()) return;
+        examples.value = test11File;
+        examples.onchange();
     };
 
     async function handleMultiComputer(spec, filename) {
@@ -470,6 +533,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const code = getCode();
         const revision = sourceRevision;
         let streamPhase = "compiling";
+        let programOutput = "";
         clearExecutable();
         resetResults("Preparando execução…", true, false);
         status("Preparando", true);
@@ -510,7 +574,10 @@ document.addEventListener("DOMContentLoaded", () => {
                     if (streamPhase === "compiling") {
                         compilerLog.hidden = false;
                         compilerOutput.append(document.createTextNode(event.text));
-                    } else appendOutput(event.text);
+                    } else {
+                        if (event.stream !== "stderr") programOutput += event.text;
+                        appendOutput(event.text);
+                    }
                 } else if (event.type === "error") {
                     if (streamPhase === "compiling") compilerLog.open = true;
                     terminalOutput.classList.add("error-text");
@@ -521,6 +588,7 @@ document.addEventListener("DOMContentLoaded", () => {
             cacheGeneratedPhase("cpp", data.cpp);
             cacheGeneratedPhase("tac", data.tac);
             if (!monitoring) {
+                showArm(programOutput, filename);
                 showExecutable(data);
                 terminalOutput.classList.toggle("error-text", !data.success);
                 appendOutput(data.success ? "\nExecução concluída.\n"

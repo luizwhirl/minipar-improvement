@@ -400,7 +400,7 @@ h2 span {
 
 .tabs {
     display: grid;
-    grid-template-columns: repeat(6,minmax(0,1fr));
+    grid-template-columns: repeat(7,minmax(0,1fr));
     align-items: stretch;
     border-top: 1px solid var(--line);
     padding: 0 10px;
@@ -1080,5 +1080,92 @@ h2 span {
     .legacy-link {
         font-size: 11px;
         padding: 7px 8px;
+    }
+}
+
+/* MINIP-31: aba ARMv7 (Teste 11) */
+.tabs .arm-tab {
+    border-left: 1px solid var(--line);
+}
+
+.arm-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    border: 1px solid #b5c2b0;
+    flex-shrink: 0;
+}
+
+.tabs .arm-tab.has-arm .arm-dot {
+    background: var(--teal);
+    border-color: var(--teal);
+}
+
+.arm-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 12px;
+    margin-bottom: 16px;
+}
+
+.arm-actions .action-help {
+    margin: 0;
+}
+
+.arm-open {
+    border: 1px solid var(--teal);
+    border-radius: 6px;
+    background: white;
+    color: var(--teal);
+    font-weight: 600;
+    font-size: 13px;
+    padding: 8px 12px;
+    cursor: pointer;
+}
+
+.arm-open:hover:not(:disabled) {
+    background: #edf2e7;
+}
+
+.arm-open:disabled {
+    border-color: var(--line);
+    color: #87938a;
+    cursor: not-allowed;
+}
+
+.arm-download {
+    display: inline-block;
+    margin-bottom: 15px;
+    color: var(--teal);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.arm-download[hidden],
+.arm-code[hidden] {
+    display: none;
+}
+
+.output pre.arm-code {
+    padding: 13px 15px;
+    background: #f7f8f3;
+    border: 1px solid #e0e5da;
+    border-radius: 6px;
+    overflow-x: auto;
+}
+
+.phase-explainer code {
+    font: 12px var(--mono);
+    background: #edf2e7;
+    padding: 1px 4px;
+    border-radius: 3px;
+    white-space: nowrap;
+}
+
+@media(max-width:800px) {
+    .tabs .arm-tab {
+        grid-column: span 3;
+        border-left: 0;
     }
 }
