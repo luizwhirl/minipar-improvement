@@ -1,0 +1,412 @@
+# Teste 11: minicompilador de expressoes que gera Assembly ARMv7 (CPUlator)
+#
+# Entrada: uma expressao com numeros inteiros, + - * /, parenteses e menos unario.
+#   Exemplo: 2 + 3 * (4 - 1)
+# Fases (as mesmas de um compilador de verdade, em miniatura):
+#   1. lexica: o texto vira uma lista de fichas (numero, operador, parentese);
+#   2. sintatica: confere a ordem das fichas (operando, operador, operando...);
+#   3. traducao: passa para a forma posfixa (algoritmo do patio de manobras);
+#   4. conferencia: calcula o valor aqui mesmo, com a mesma divisao do ARM;
+#   5. geracao: cada ficha posfixa vira instrucoes ARMv7 de maquina de pilha.
+# Saida: o Assembly fica entre as linhas "=== INICIO ARM ===" e "=== FIM ARM ===".
+# No CPUlator (sistema ARMv7), o resultado aparece em r0 e na palavra "resultado".
+#
+# Fichas: cada ficha ocupa 2 posicoes na lista: [tipo, valor].
+#   tipo 1 = numero (valor = o numero)
+#   tipo 2 = operador (valor: 1 soma, 2 subtracao, 3 multiplicacao, 4 divisao, 5 menos unario)
+#   tipo 3 = abre parentese, tipo 4 = fecha parentese
+# Erro: a lista volta como [-1, posicao do erro] (posicao contada a partir de 1).
+
+func valor_digito(c) {
+    var digitos = "0123456789";
+    var i = 0;
+    while (i < 10) {
+        if (digitos[i] == c) { return i; }
+        i = i + 1;
+    }
+    return -1;
+}
+
+func codigo_operador(c) {
+    if (c == "+") { return 1; }
+    if (c == "-") { return 2; }
+    if (c == "*") { return 3; }
+    if (c == "/") { return 4; }
+    return 0;
+}
+
+func simbolo_operador(op) {
+    if (op == 1) { return "+"; }
+    if (op == 2) { return "-"; }
+    if (op == 3) { return "*"; }
+    if (op == 4) { return "/"; }
+    return "neg";
+}
+
+func erro_em(posicao) {
+    var erro = [];
+    erro.append(-1);
+    erro.append(posicao);
+    return erro;
+}
+
+# Numero inteiro vira texto sem notacao cientifica (to_string mostraria 1e+06).
+func texto_inteiro(n) {
+    var sinal = "";
+    if (n < 0) {
+        sinal = "-";
+        n = -n;
+    }
+    var potencias = [1000000000, 100000000, 10000000, 1000000, 100000, 10000, 1000, 100, 10, 1];
+    var digitos = "0123456789";
+    var texto = "";
+    for (var k = 0; k < 10; k = k + 1) {
+        var d = 0;
+        while (n >= potencias[k]) {
+            n = n - potencias[k];
+            d = d + 1;
+        }
+        if (len(texto) > 0 || d > 0 || k == 9) {
+            texto = texto + digitos[d];
+        }
+    }
+    return sinal + texto;
+}
+
+# Fase 1: analise lexica.
+func analisar_lexico(texto) {
+    var fichas = [];
+    var i = 0;
+    var n = len(texto);
+    while (i < n) {
+        var c = texto[i];
+        if (c == " ") {
+            i = i + 1;
+        } else if (valor_digito(c) >= 0) {
+            var valor = 0;
+            while (i < n && valor_digito(texto[i]) >= 0) {
+                var d = valor_digito(texto[i]);
+                # O ARM trabalha com 32 bits: o maior inteiro e 2147483647.
+                if (valor > 214748364 || (valor == 214748364 && d > 7)) {
+                    return erro_em(i + 1);
+                }
+                valor = valor * 10 + d;
+                i = i + 1;
+            }
+            fichas.append(1);
+            fichas.append(valor);
+        } else if (codigo_operador(c) > 0) {
+            var op = codigo_operador(c);
+            # O "-" e unario no comeco, depois de operador ou depois de "(".
+            if (op == 2) {
+                if (len(fichas) == 0) {
+                    op = 5;
+                } else if (fichas[len(fichas) - 2] == 2 || fichas[len(fichas) - 2] == 3) {
+                    op = 5;
+                }
+            }
+            fichas.append(2);
+            fichas.append(op);
+            i = i + 1;
+        } else if (c == "(") {
+            fichas.append(3);
+            fichas.append(0);
+            i = i + 1;
+        } else if (c == ")") {
+            fichas.append(4);
+            fichas.append(0);
+            i = i + 1;
+        } else {
+            return erro_em(i + 1);
+        }
+    }
+    return fichas;
+}
+
+# Fase 2: analise sintatica. Devolve 0 se a ordem das fichas esta certa,
+# ou o numero da ficha (a partir de 1) onde a ordem quebrou.
+func analisar_sintaxe(fichas) {
+    var espera_operando = true;
+    var abertos = 0;
+    var k = 0;
+    while (k < len(fichas)) {
+        var tipo = fichas[k];
+        var valor = fichas[k + 1];
+        var numero_ficha = k / 2 + 1;
+        if (espera_operando) {
+            if (tipo == 1) {
+                espera_operando = false;
+            } else if (tipo == 3) {
+                abertos = abertos + 1;
+            } else if (tipo == 2 && valor == 5) {
+                espera_operando = true;
+            } else {
+                return numero_ficha;
+            }
+        } else {
+            if (tipo == 2 && valor != 5) {
+                espera_operando = true;
+            } else if (tipo == 4 && abertos > 0) {
+                abertos = abertos - 1;
+            } else {
+                return numero_ficha;
+            }
+        }
+        k = k + 2;
+    }
+    if (espera_operando || abertos > 0) {
+        return len(fichas) / 2 + 1;
+    }
+    return 0;
+}
+
+func precedencia(op) {
+    if (op == 1 || op == 2) { return 1; }
+    if (op == 3 || op == 4) { return 2; }
+    return 3;
+}
+
+# Fase 3: forma posfixa (patio de manobras). Na pilha, 0 marca um "(".
+func para_posfixa(fichas) {
+    var saida = [];
+    var pilha = [];
+    var k = 0;
+    while (k < len(fichas)) {
+        var tipo = fichas[k];
+        var valor = fichas[k + 1];
+        if (tipo == 1) {
+            saida.append(1);
+            saida.append(valor);
+        } else if (tipo == 2) {
+            var continuar = true;
+            while (continuar && len(pilha) > 0) {
+                var topo = pilha[len(pilha) - 1];
+                # Binario e associativo a esquerda; o menos unario, a direita.
+                if (topo != 0 && (precedencia(topo) > precedencia(valor) || (precedencia(topo) == precedencia(valor) && valor != 5))) {
+                    saida.append(2);
+                    saida.append(pilha.pop());
+                } else {
+                    continuar = false;
+                }
+            }
+            pilha.append(valor);
+        } else if (tipo == 3) {
+            pilha.append(0);
+        } else {
+            while (pilha[len(pilha) - 1] != 0) {
+                saida.append(2);
+                saida.append(pilha.pop());
+            }
+            pilha.pop();
+        }
+        k = k + 2;
+    }
+    while (len(pilha) > 0) {
+        saida.append(2);
+        saida.append(pilha.pop());
+    }
+    return saida;
+}
+
+func mostrar_posfixa(posfixa) {
+    var texto = "";
+    var k = 0;
+    while (k < len(posfixa)) {
+        if (k > 0) { texto = texto + " "; }
+        if (posfixa[k] == 1) {
+            texto = texto + texto_inteiro(posfixa[k + 1]);
+        } else {
+            texto = texto + simbolo_operador(posfixa[k + 1]);
+        }
+        k = k + 2;
+    }
+    return texto;
+}
+
+# Divisao inteira que corta para zero, pelo mesmo metodo da rotina ARM
+# "dividir": subtrai o divisor dobrado (deslocado) do maior para o menor.
+func dividir(a, b) {
+    var negativo = false;
+    if (a < 0) {
+        a = -a;
+        negativo = !negativo;
+    }
+    if (b < 0) {
+        b = -b;
+        negativo = !negativo;
+    }
+    var multiplos = [];
+    var bits = [];
+    var m = b;
+    var bit = b - b + 1;  # vale 1, mas como numero real: nao estoura ao dobrar ate 2^31
+    while (m <= a) {
+        multiplos.append(m);
+        bits.append(bit);
+        m = m + m;
+        bit = bit + bit;
+    }
+    var quociente = b - b;  # vale 0, tambem como numero real
+    var k = len(multiplos) - 1;
+    while (k >= 0) {
+        if (a >= multiplos[k]) {
+            a = a - multiplos[k];
+            quociente = quociente + bits[k];
+        }
+        k = k - 1;
+    }
+    if (negativo) {
+        return 0 - quociente;
+    }
+    return quociente;
+}
+
+# Fase 4: calcula o valor da posfixa com uma pilha.
+# Devolve [1, valor] se deu certo; [-1, 1] para divisao por zero;
+# [-1, 2] se alguma conta sair dos 32 bits do ARM.
+func avaliar(posfixa) {
+    var pilha = [];
+    var k = 0;
+    while (k < len(posfixa)) {
+        if (posfixa[k] == 1) {
+            pilha.append(posfixa[k + 1]);
+        } else {
+            var op = posfixa[k + 1];
+            var b = pilha.pop();
+            var a = 0;
+            if (op != 5) { a = pilha.pop(); }
+            var r = a + b;
+            if (op == 2) { r = a - b; }
+            if (op == 3) { r = a * b; }
+            if (op == 4) {
+                if (b == 0) { return erro_em(1); }
+                r = dividir(a, b);
+            }
+            if (op == 5) { r = 0 - b; }
+            # Faixa simetrica de 32 bits (sem -2147483648, que nao tem oposto).
+            if (r > 2147483647 || r < 0 - 2147483647) {
+                return erro_em(2);
+            }
+            pilha.append(r);
+        }
+        k = k + 2;
+    }
+    var resposta = [];
+    resposta.append(1);
+    resposta.append(pilha.pop());
+    return resposta;
+}
+
+# Fase 5: geracao do Assembly ARMv7 (maquina de pilha).
+func gerar_arm(posfixa, expressao) {
+    var arm = "@ Gerado pelo Teste 11 do MiniPar (minicompilador de expressoes)\n";
+    arm = arm + "@ Expressao: " + expressao + "\n";
+    arm = arm + "@ Posfixa:   " + mostrar_posfixa(posfixa) + "\n";
+    arm = arm + "@ Ao parar: r0 e a palavra \"resultado\" guardam o valor final.\n";
+    arm = arm + ".global _start\n";
+    arm = arm + ".text\n";
+    arm = arm + "_start:\n";
+    arm = arm + "    LDR sp, =topo_pilha      @ pilha propria (nao depende do sistema)\n";
+    var usa_divisao = false;
+    var k = 0;
+    while (k < len(posfixa)) {
+        var valor = posfixa[k + 1];
+        if (posfixa[k] == 1) {
+            arm = arm + "    LDR r0, =" + texto_inteiro(valor) + "\n";
+            arm = arm + "    PUSH {r0}\n";
+        } else if (valor == 5) {
+            arm = arm + "    POP {r0}                 @ neg\n";
+            arm = arm + "    RSB r0, r0, #0\n";
+            arm = arm + "    PUSH {r0}\n";
+        } else {
+            arm = arm + "    POP {r1}                 @ " + simbolo_operador(valor) + "\n";
+            arm = arm + "    POP {r0}\n";
+            if (valor == 1) { arm = arm + "    ADD r0, r0, r1\n"; }
+            if (valor == 2) { arm = arm + "    SUB r0, r0, r1\n"; }
+            if (valor == 3) { arm = arm + "    MUL r0, r0, r1\n"; }
+            if (valor == 4) {
+                arm = arm + "    BL dividir\n";
+                usa_divisao = true;
+            }
+            arm = arm + "    PUSH {r0}\n";
+        }
+        k = k + 2;
+    }
+    arm = arm + "    POP {r0}\n";
+    arm = arm + "    LDR r1, =resultado\n";
+    arm = arm + "    STR r0, [r1]\n";
+    arm = arm + "fim:\n";
+    arm = arm + "    B fim\n";
+    if (usa_divisao) {
+        arm = arm + "\n@ dividir: r0 = r0 / r1, cortando para zero (o Cortex-A9 nao tem SDIV).\n";
+        arm = arm + "dividir:\n";
+        arm = arm + "    PUSH {r4, lr}\n";
+        arm = arm + "    MOV r4, #0               @ r4 = 1 se o resultado for negativo\n";
+        arm = arm + "    CMP r0, #0\n";
+        arm = arm + "    RSBLT r0, r0, #0\n";
+        arm = arm + "    EORLT r4, r4, #1\n";
+        arm = arm + "    CMP r1, #0\n";
+        arm = arm + "    RSBLT r1, r1, #0\n";
+        arm = arm + "    EORLT r4, r4, #1\n";
+        arm = arm + "    MOV r2, #0               @ quociente\n";
+        arm = arm + "    MOV r3, #1               @ bit do quociente\n";
+        arm = arm + "dividir_alinha:\n";
+        arm = arm + "    CMP r1, r0\n";
+        arm = arm + "    BHI dividir_subtrai\n";
+        arm = arm + "    TST r1, #0x80000000\n";
+        arm = arm + "    BNE dividir_subtrai\n";
+        arm = arm + "    LSL r1, r1, #1\n";
+        arm = arm + "    LSL r3, r3, #1\n";
+        arm = arm + "    B dividir_alinha\n";
+        arm = arm + "dividir_subtrai:\n";
+        arm = arm + "    CMP r0, r1\n";
+        arm = arm + "    SUBHS r0, r0, r1\n";
+        arm = arm + "    ORRHS r2, r2, r3\n";
+        arm = arm + "    LSR r1, r1, #1\n";
+        arm = arm + "    LSRS r3, r3, #1\n";
+        arm = arm + "    BNE dividir_subtrai\n";
+        arm = arm + "    MOV r0, r2\n";
+        arm = arm + "    CMP r4, #0\n";
+        arm = arm + "    RSBNE r0, r0, #0\n";
+        arm = arm + "    POP {r4, pc}\n";
+    }
+    arm = arm + "\n.data\n";
+    arm = arm + "resultado:\n";
+    arm = arm + "    .word 0\n";
+    arm = arm + "pilha:\n";
+    arm = arm + "    .space 1024\n";
+    arm = arm + "topo_pilha:\n";
+    return arm;
+}
+
+seq {
+    var expressao = input("Expressao (ex.: 2 + 3 * (4 - 1)): ");
+    print("Expressao lida:", expressao);
+    var fichas = analisar_lexico(expressao);
+    if (len(fichas) == 0) {
+        print("Erro sintatico: expressao vazia.");
+    } else if (fichas[0] == -1) {
+        print("Erro lexico: caractere invalido na posicao " + texto_inteiro(fichas[1]) + ".");
+    } else {
+        print("Fase 1 (lexica): " + texto_inteiro(len(fichas) / 2) + " ficha(s).");
+        var quebra = analisar_sintaxe(fichas);
+        if (quebra > 0) {
+            print("Erro sintatico: ordem invalida na ficha " + texto_inteiro(quebra) + ".");
+        } else {
+            print("Fase 2 (sintatica): ordem das fichas OK.");
+            var posfixa = para_posfixa(fichas);
+            print("Fase 3 (posfixa): " + mostrar_posfixa(posfixa));
+            var conta = avaliar(posfixa);
+            if (conta[0] == -1 && conta[1] == 1) {
+                print("Erro semantico: divisao por zero.");
+            } else if (conta[0] == -1) {
+                print("Erro semantico: o valor passa dos 32 bits do ARM.");
+            } else {
+                print("Fase 4 (conferencia): Resultado esperado: " + texto_inteiro(conta[1]));
+                print("Fase 5 (geracao): Assembly ARMv7 abaixo (copie para o CPUlator).");
+                print("=== INICIO ARM ===");
+                print(gerar_arm(posfixa, expressao));
+                print("=== FIM ARM ===");
+            }
+        }
+    }
+}

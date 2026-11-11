@@ -70,11 +70,57 @@ CASES = {
         (["4"], "ascii", (4, 9)),
         (["8"], "ascii", (8, 27)),
     ),
+    "teste11_minicompilador_expressoes_arm.minipar": (
+        (["2 + 3 * (4 - 1)"], "arm", 11),
+        (["(100 - 2) / -7 + 3 * 4"], "arm", -2),
+    ),
     "teste_bnf_controles_input.minipar": (
         (["Ana", "5", "2"], "controls", ("Ana", 7, 2)),
         (["Bia", "7", "3"], "controls", ("Bia", 18, 3)),
     ),
 }
+
+
+def arm_block(output):
+    """Assembly between the marks agreed with the web ARMv7 tab (MINIP-31)."""
+    lines = [line.rstrip("\r") for line in output.splitlines()]
+    marks = [line.strip() for line in lines]
+    start, end = marks.index("=== INICIO ARM ==="), marks.index("=== FIM ARM ===")
+    return "\n".join(lines[start + 1:end])
+
+
+def run_stack_arm(code):
+    """Run the stack-machine part of the Teste 11 Assembly (CPUlator is the real check)."""
+    registers, stack, result = {}, [], None
+    for raw in code.split("_start:", 1)[1].splitlines():
+        line = raw.split("@", 1)[0].strip()
+        if line in ("", "fim:", "B fim"):
+            if line == "B fim":
+                break
+            continue
+        if line.startswith("LDR sp"):
+            continue
+        match = re.fullmatch(r"LDR (r[01]), =(-?\d+|resultado)", line)
+        if match:
+            registers[match.group(1)] = match.group(2)
+        elif re.fullmatch(r"PUSH \{r0\}", line):
+            stack.append(int(registers["r0"]))
+        elif re.fullmatch(r"POP \{(r[01])\}", line):
+            registers[line[5:7]] = stack.pop()
+        elif line in ("ADD r0, r0, r1", "SUB r0, r0, r1", "MUL r0, r0, r1"):
+            a, b = int(registers["r0"]), int(registers["r1"])
+            registers["r0"] = {"ADD": a + b, "SUB": a - b, "MUL": a * b}[line[:3]]
+        elif line == "RSB r0, r0, #0":
+            registers["r0"] = -int(registers["r0"])
+        elif line == "BL dividir":
+            a, b = int(registers["r0"]), int(registers["r1"])
+            quotient = abs(a) // abs(b)
+            registers["r0"] = quotient if (a < 0) == (b < 0) else -quotient
+        elif line == "STR r0, [r1]":
+            result = int(registers["r0"])
+        else:
+            raise AssertionError(f"Unexpected ARM line: {line}")
+    return result
 
 
 @unittest.skipUnless(shutil.which("g++"), "Requires g++ on PATH")
@@ -142,6 +188,9 @@ class InteractiveExampleTests(unittest.TestCase):
             name, total, attempts = expected
             self.assertIn(name, output)
             self.assertIn(f"Controle OK: {total} {attempts}", compact)
+        elif kind == "arm":
+            self.assertIn(f"Resultado esperado: {expected}", compact)
+            self.assertEqual(run_stack_arm(arm_block(output)), expected, output)
         else:
             self.fail(f"Missing result checker for {kind}")
 
