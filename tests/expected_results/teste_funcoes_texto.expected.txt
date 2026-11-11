@@ -1,0 +1,10 @@
+ab*
+*****
+n=42
+media=7.5
+comp
+dor
+c r
+rapinim
+letras a: 3
+tamanho: 10
