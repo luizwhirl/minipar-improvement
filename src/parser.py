@@ -368,14 +368,18 @@ class Parser:
         elif self._match(TokenType.FORK):
             line = tok.line
             call_expr = self._parse_expression()
-            node = ForkExpr(function_call=call_expr, line=line)
+            # fork f(x) on canal -> a tarefa roda no computador do canal (MINIP-30)
+            destination = self._parse_expression() if self._match(TokenType.ON) else None
+            node = ForkExpr(function_call=call_expr, line=line, destination=destination)
             
         elif self._match(TokenType.JOIN):
             line = tok.line
             self._consume(TokenType.LPAREN, "Esperado '(' apos join")
             task_expr = self._parse_expression()
+            # join(t, ms) -> espera no maximo ms milissegundos (MINIP-30)
+            timeout = self._parse_expression() if self._match(TokenType.COMMA) else None
             self._consume(TokenType.RPAREN, "Esperado ')'")
-            node = JoinExpr(task=task_expr, line=line)
+            node = JoinExpr(task=task_expr, line=line, timeout=timeout)
         else:
             sys.exit(print(f"[ERRO SINTATICO] Linha {tok.line}: Expressao esperada", file=sys.stderr) or 1)
 

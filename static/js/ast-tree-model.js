@@ -28,7 +28,8 @@
         attributes: "Atributo", methods: "Método", object: "Objeto", channel: "Canal",
         message: "Mensagem", ip: "Endereço", port: "Porta", prompt: "Mensagem de entrada",
         elements: "Elemento", rows: "Linhas", cols: "Colunas", index: "Índice", target: "Destino",
-        function_call: "Chamada paralela", task: "Tarefa"
+        function_call: "Chamada paralela", task: "Tarefa",
+        destination: "Computador de destino (canal)", timeout: "Tempo limite (ms)"
     };
     const fieldOrder = {
         Program: ["statements"], SeqBlock: ["statements"], ParBlock: ["statements"],
@@ -42,7 +43,7 @@
         CChannelExpr: ["ip", "port"], SendStmt: ["channel", "message"], ReceiveExpr: ["channel"],
         InputExpr: ["prompt"], ListLiteral: ["elements"], MatrixCreateExpr: ["rows", "cols", "init_value"],
         IndexExpr: ["object", "index"], IndexAssign: ["target", "value"],
-        ForkExpr: ["function_call"], JoinExpr: ["task"]
+        ForkExpr: ["function_call", "destination"], JoinExpr: ["task", "timeout"]
     };
     const isNode = value => value !== null && typeof value === "object"
         && !Array.isArray(value) && typeof value.node_type === "string";

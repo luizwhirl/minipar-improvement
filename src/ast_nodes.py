@@ -214,8 +214,12 @@ class Program(ASTNode):
 class ForkExpr(ASTNode):
     function_call: ASTNode
     line: int = 1
+    # fork f(x) on canal: canal (c_channel) do computador que roda a tarefa; None = roda aqui
+    destination: Optional[ASTNode] = None
 
 @dataclass
 class JoinExpr(ASTNode):
     task: ASTNode
     line: int = 1
+    # join(t, ms): tempo limite em milissegundos; None = espera o tempo que for preciso
+    timeout: Optional[ASTNode] = None

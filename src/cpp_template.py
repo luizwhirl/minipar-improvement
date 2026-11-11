@@ -49,7 +49,17 @@ double __fork(F fn) {
     return static_cast<double>(__tasks.size() - 1);
 }
 
-inline double __join(double id) {
+// Encerra o programa na hora com erro. Usa _Exit porque std::exit esperaria
+// as outras tarefas (std::async) terminarem, e uma tarefa travada travaria tudo.
+[[noreturn]] inline void __fail_now(const std::string& msg) {
+    std::cout.flush();
+    std::cerr << "[ERRO EXECUCAO] " << msg << std::endl;
+    std::cerr.flush();
+    std::_Exit(1);
+}
+
+// join(t, ms): espera no maximo ms milissegundos (ms < 0 = sem limite).
+inline double __join(double id, double timeout_ms) {
     std::shared_future<double> fut;
     {
         std::lock_guard<std::mutex> lock(__tasks_mtx);
@@ -60,8 +70,23 @@ inline double __join(double id) {
         }
         fut = __tasks[i];
     }
-    return fut.get();
+    if (timeout_ms >= 0) {
+        auto limit = std::chrono::milliseconds(static_cast<long long>(timeout_ms));
+        if (fut.wait_for(limit) != std::future_status::ready) {
+            std::ostringstream msg;
+            msg << "join: a tarefa " << id << " passou do tempo limite de " << timeout_ms << " ms.";
+            __fail_now(msg.str());
+        }
+    }
+    try {
+        return fut.get();
+    } catch (const std::exception& e) {
+        __fail_now(std::string("join: a tarefa ") + std::to_string(static_cast<long long>(id)) + " falhou: " + e.what());
+    }
 }
+
+// join(t): espera o tempo que for preciso.
+inline double __join(double id) { return __join(id, -1); }
 
 // Helper para Random nativo
 double random_val() { return (double)rand() / RAND_MAX; }

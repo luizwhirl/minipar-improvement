@@ -33,6 +33,7 @@ class TokenType(Enum):
     MATRIX    = auto()
     FORK      = auto()
     JOIN      = auto()
+    ON        = auto()
     TYPE      = auto()
     PLUS      = auto()
     MINUS     = auto()
@@ -87,6 +88,7 @@ KEYWORDS: dict[str, TokenType] = {
     "matrix":    TokenType.MATRIX,
     "fork":      TokenType.FORK,
     "join":      TokenType.JOIN,
+    "on":        TokenType.ON,
     "true":      TokenType.BOOL_LITERAL,
     "false":     TokenType.BOOL_LITERAL,
     "number":    TokenType.TYPE,

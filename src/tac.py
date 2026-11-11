@@ -100,14 +100,18 @@ class TACGenerator:
             for arg in args:
                 self._emit(f"param {self._expr(arg)}")
                 
+            # fork ... on canal: o destino aparece no fim (spawn f, 1 on canal)
+            dest = f" on {self._expr(node.destination)}" if node.destination is not None else ""
             tmp = self._temp()
-            self._emit(f"{tmp} = spawn {name}, {len(args)}")
+            self._emit(f"{tmp} = spawn {name}, {len(args)}{dest}")
             return tmp
 
         if isinstance(node, JoinExpr):
             task_tmp = self._expr(node.task)
+            # join(t, ms): o tempo limite vira o segundo operando (join t, ms)
+            limit = f", {self._expr(node.timeout)}" if node.timeout is not None else ""
             tmp = self._temp()
-            self._emit(f"{tmp} = join {task_tmp}")
+            self._emit(f"{tmp} = join {task_tmp}{limit}")
             return tmp
         return "?"
 

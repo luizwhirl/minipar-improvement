@@ -55,6 +55,10 @@ class SemanticAnalyzer:
     # Codigos dos erros de fork/join (MINIP-30). Aparecem na mensagem como [SEM_FJ_01].
     SEM_FJ_FORK_SEM_CHAMADA = "SEM_FJ_01"  # fork precisa de uma chamada: fork f(x)
     SEM_FJ_JOIN_SEM_TAREFA = "SEM_FJ_02"   # join precisa de uma tarefa criada por fork
+    SEM_FJ_DESTINO = "SEM_FJ_03"           # fork ... on X: X precisa ser um c_channel
+    SEM_FJ_TEMPO = "SEM_FJ_04"             # join(t, ms): ms precisa ser numero
+    SEM_FJ_REMOTO_FUNCAO = "SEM_FJ_05"     # fork remoto so chama funcao global (func), nao metodo
+    SEM_FJ_REMOTO_ARGUMENTO = "SEM_FJ_06"  # fork remoto so envia numeros como argumento
 
     def _report(self, line: int, message: str, code: Optional[str] = None) -> None:
         tag = f" [{code}]" if code else ""
@@ -276,12 +280,37 @@ class SemanticAnalyzer:
             if not isinstance(node.function_call, (FuncCallExpr, MethodCall)):
                 self._report(node.line, "A expressao 'fork' exige uma chamada de funcao ou metodo.", code=self.SEM_FJ_FORK_SEM_CHAMADA)
             self.validate_node(node.function_call)
+            if node.destination is not None:
+                self._validate_remote_fork(node)
 
         elif isinstance(node, JoinExpr):
             self.validate_node(node.task)
             task_type = self._infer_type(node.task)
             if task_type not in ("task", "unknown", "var"):
                 self._report(node.line, f"A expressao 'join' exige um identificador de tarefa, recebido: '{task_type}'.", code=self.SEM_FJ_JOIN_SEM_TAREFA)
+            if node.timeout is not None:
+                self.validate_node(node.timeout)
+                timeout_type = self._infer_type(node.timeout)
+                if timeout_type not in ("number", "int", "unknown", "var"):
+                    self._report(node.line, f"O tempo limite do 'join' deve ser um numero (milissegundos), recebido: '{timeout_type}'.", code=self.SEM_FJ_TEMPO)
+
+    def _validate_remote_fork(self, node: ForkExpr) -> None:
+        """Regras do fork que roda em outro computador: fork f(x) on canal."""
+        self.validate_node(node.destination)
+        dest_type = self._infer_type(node.destination)
+        if dest_type not in ("c_channel", "unknown", "var"):
+            self._report(node.line, f"O destino do 'fork ... on' deve ser um c_channel, recebido: '{dest_type}'.", code=self.SEM_FJ_DESTINO)
+        call = node.function_call
+        # O outro computador roda o mesmo programa e acha a tarefa pelo nome da funcao.
+        # Metodo de objeto ou funcao pronta (len, substr...) nao tem como ir pela rede.
+        if not isinstance(call, FuncCallExpr) or call.name not in self._functions:
+            self._report(node.line, "O 'fork ... on' so pode chamar uma funcao declarada com 'func' (nao metodo nem funcao pronta).", code=self.SEM_FJ_REMOTO_FUNCAO)
+            return
+        # Pela rede vao so numeros (o join tambem so devolve numero).
+        for arg in call.arguments:
+            arg_type = self._infer_type(arg)
+            if arg_type not in ("number", "int", "bool", "unknown", "var"):
+                self._report(node.line, f"O 'fork ... on' so envia numeros como argumento, recebido: '{arg_type}'.", code=self.SEM_FJ_REMOTO_ARGUMENTO)
 
     def analyze(self, program: Program) -> bool:
         self._collect_declarations(program)

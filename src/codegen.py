@@ -102,12 +102,18 @@ class CppCodeGenerator:
         # fork f(x): roda a chamada numa thread propria e devolve o numero da tarefa.
         # [=] copia os valores atuais (ex.: o i do laco), entao cada tarefa recebe o seu.
         # mutable deixa a tarefa mexer na propria copia (ex.: xs.pop() dentro do fork).
+        # fork f(x) on canal: neste passo a tarefa ainda roda neste computador
+        # (o envio pela rede entra no passo 3 do MINIP-30).
         if isinstance(node, ForkExpr):
             call = self._translate_expression(node.function_call)
             return f"__fork([=]() mutable {{ return {call}; }})"
         # join(t): espera a tarefa t terminar e devolve o resultado (double).
+        # join(t, ms): espera no maximo ms milissegundos; se passar, o programa para com erro.
         if isinstance(node, JoinExpr):
-            return f"__join({self._translate_expression(node.task)})"
+            task = self._translate_expression(node.task)
+            if node.timeout is not None:
+                return f"__join({task}, {self._translate_expression(node.timeout)})"
+            return f"__join({task})"
 
         return "0"
 
